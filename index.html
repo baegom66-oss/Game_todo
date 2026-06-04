@@ -4,8 +4,1082 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Game Life Manager</title>
+    <style>
+      :root {
+        --bg: #0f1419;
+        --surface: #1a2332;
+        --surface2: #243044;
+        --border: #2d3a4f;
+        --text: #e8edf4;
+        --muted: #8b9cb3;
+        --accent: #5ce1e6;
+        --accent2: #a78bfa;
+        --player: #34d399;
+        --dev: #fbbf24;
+        --danger: #f87171;
+        --radius: 10px;
+        --font: 'Segoe UI', system-ui, sans-serif;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        font-family: var(--font);
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        line-height: 1.5;
+      }
+      .app { max-width: 960px; margin: 0 auto; padding: 1rem 1.25rem 2rem; }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-bottom: 1.25rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid var(--border);
+      }
+      header h1 { font-size: 1.35rem; font-weight: 700; }
+      header h1 span { color: var(--accent); }
+      nav {
+        display: flex;
+        gap: 0.35rem;
+        background: var(--surface);
+        padding: 0.35rem;
+        border-radius: var(--radius);
+        border: 1px solid var(--border);
+      }
+      nav button {
+        border: none;
+        background: transparent;
+        color: var(--muted);
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        font-weight: 600;
+        transition: 0.15s;
+      }
+      nav button.active {
+        background: var(--surface2);
+        color: var(--text);
+      }
+      nav button[data-view='player'].active { color: var(--player); }
+      nav button[data-view='developer'].active { color: var(--dev); }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 1rem 1.1rem;
+        margin-bottom: 0.85rem;
+      }
+      .card h2, .card h3 {
+        font-size: 0.95rem;
+        margin-bottom: 0.65rem;
+        color: var(--accent);
+      }
+      .card h3 { font-size: 0.88rem; color: var(--muted); }
+      .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; }
+      @media (max-width: 640px) { .grid-2 { grid-template-columns: 1fr; } }
+      .muted { color: var(--muted); font-size: 0.85rem; }
+      .empty { color: var(--muted); font-size: 0.88rem; padding: 0.5rem 0; }
+      input, textarea, select {
+        width: 100%;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 0.5rem 0.65rem;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        margin-bottom: 0.5rem;
+      }
+      textarea { min-height: 72px; resize: vertical; }
+      .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; margin-bottom: 0.5rem; }
+      .row input, .row select { flex: 1; min-width: 120px; margin-bottom: 0; }
+      button.btn {
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 0.45rem 0.85rem;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.85rem;
+        font-weight: 600;
+      }
+      button.btn:hover { border-color: var(--accent); }
+      button.btn-primary { background: #1e3a5f; border-color: var(--accent); color: var(--accent); }
+      button.btn-player { border-color: var(--player); color: var(--player); }
+      button.btn-dev { border-color: var(--dev); color: var(--dev); }
+      button.btn-danger { border-color: var(--danger); color: var(--danger); }
+      button.btn-sm { padding: 0.3rem 0.55rem; font-size: 0.78rem; }
+      ul.list { list-style: none; }
+      ul.list li {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5rem;
+        padding: 0.45rem 0;
+        border-bottom: 1px solid var(--border);
+        font-size: 0.88rem;
+      }
+      ul.list li:last-child { border-bottom: none; }
+      .game-item, .project-item {
+        cursor: pointer;
+        padding: 0.55rem 0.65rem;
+        border-radius: 8px;
+        margin-bottom: 0.35rem;
+        border: 1px solid transparent;
+      }
+      .game-item:hover, .project-item:hover { background: var(--surface2); }
+      .game-item.selected, .project-item.selected {
+        border-color: var(--accent);
+        background: var(--surface2);
+      }
+      .badge {
+        display: inline-block;
+        font-size: 0.72rem;
+        padding: 0.15rem 0.45rem;
+        border-radius: 6px;
+        background: var(--surface2);
+        color: var(--muted);
+      }
+      .badge-planned { color: #93c5fd; }
+      .badge-in_progress { color: var(--dev); }
+      .badge-completed { color: var(--player); }
+      .xp-bar-wrap { margin-top: 0.5rem; }
+      .xp-bar-label {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.82rem;
+        margin-bottom: 0.35rem;
+      }
+      .xp-bar {
+        height: 12px;
+        background: var(--bg);
+        border-radius: 6px;
+        overflow: hidden;
+        border: 1px solid var(--border);
+      }
+      .xp-bar-fill {
+        height: 100%;
+        background: linear-gradient(90deg, var(--dev), var(--accent2));
+        border-radius: 6px;
+        transition: width 0.3s;
+      }
+      .toast {
+        position: fixed;
+        bottom: 1.25rem;
+        right: 1.25rem;
+        background: var(--surface2);
+        border: 1px solid var(--accent);
+        color: var(--accent);
+        padding: 0.65rem 1rem;
+        border-radius: var(--radius);
+        font-size: 0.88rem;
+        font-weight: 600;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.25s;
+        z-index: 100;
+      }
+      .toast.show { opacity: 1; }
+      label.chk { display: flex; align-items: center; gap: 0.45rem; cursor: pointer; flex: 1; }
+      label.chk input { width: auto; margin: 0; }
+      .done-text { text-decoration: line-through; color: var(--muted); }
+      .split { display: grid; grid-template-columns: 220px 1fr; gap: 1rem; }
+      @media (max-width: 720px) { .split { grid-template-columns: 1fr; } }
+      .section-title {
+        font-size: 1.05rem;
+        font-weight: 700;
+        margin-bottom: 0.85rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+    </style>
   </head>
   <body>
-    <h1>🎉 드디어 연결 완료!</h1>
+    <div class="app">
+      <header>
+        <h1>🎮 <span>Game Life</span> Manager</h1>
+        <nav id="nav"></nav>
+      </header>
+      <main id="main"></main>
+    </div>
+    <div id="toast" class="toast"></div>
+
+    <script>
+      /* ═══════════════════════════════════════════════════════════════
+         데이터 구조 (src/types/index.ts)
+      ═══════════════════════════════════════════════════════════════ */
+      const STORAGE_KEY = 'game-life-manager:v1';
+
+      function createInitialAppData() {
+        return {
+          version: 1,
+          games: [],
+          devProjects: [],
+          devJournals: [],
+          ideaMemos: [],
+          developerStats: { totalXp: 0, level: 1, recentXpEvents: [] },
+        };
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+         RPG (src/types/rpg.ts)
+      ═══════════════════════════════════════════════════════════════ */
+      const XP_REWARDS = { task_complete: 5, journal_write: 10 };
+      const LEVEL_THRESHOLDS = [0, 100, 250, 450, 700, 1000, 1350, 1750, 2200, 2700];
+
+      function thresholdForLevel(level) {
+        if (level <= 1) return 0;
+        if (level - 1 < LEVEL_THRESHOLDS.length) return LEVEL_THRESHOLDS[level - 1];
+        const lastDefined = LEVEL_THRESHOLDS.length;
+        let lastXp = LEVEL_THRESHOLDS[lastDefined - 1];
+        let prevXp = LEVEL_THRESHOLDS[lastDefined - 2];
+        let gap = lastXp - prevXp;
+        let xp = lastXp;
+        for (let lv = lastDefined + 1; lv <= level; lv++) {
+          gap += 50;
+          xp += gap;
+        }
+        return xp;
+      }
+
+      function levelFromTotalXp(totalXp) {
+        let level = 1;
+        while (thresholdForLevel(level + 1) <= totalXp) level++;
+        return level;
+      }
+
+      function xpProgressInLevel(totalXp) {
+        const level = levelFromTotalXp(totalXp);
+        const floor = thresholdForLevel(level);
+        const ceiling = thresholdForLevel(level + 1);
+        const currentInLevel = totalXp - floor;
+        const neededForLevel = ceiling - floor;
+        const percent =
+          neededForLevel <= 0 ? 100 : Math.min(100, (currentInLevel / neededForLevel) * 100);
+        return { level, currentInLevel, neededForLevel, percent };
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+         LocalStorage
+      ═══════════════════════════════════════════════════════════════ */
+      let state = loadAppData();
+      let currentView = 'home';
+      let selectedGameId = null;
+      let selectedProjectId = null;
+
+      function loadAppData() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) return createInitialAppData();
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.version === 1) return parsed;
+        } catch (e) {
+          console.warn('load failed', e);
+        }
+        return createInitialAppData();
+      }
+
+      function saveAppData() {
+        state.developerStats.level = levelFromTotalXp(state.developerStats.totalXp);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        render();
+      }
+
+      function persist() {
+        saveAppData();
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+         유틸
+      ═══════════════════════════════════════════════════════════════ */
+      function uid() {
+        return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      }
+
+      function nowIso() {
+        return new Date().toISOString();
+      }
+
+      function todayStr() {
+        return new Date().toISOString().slice(0, 10);
+      }
+
+      function fmtDate(iso) {
+        if (!iso) return '';
+        const d = new Date(iso);
+        return d.toLocaleString('ko-KR', {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+      }
+
+      function statusLabel(s) {
+        return { planned: '예정', in_progress: '진행중', completed: '완료' }[s] || s;
+      }
+
+      function showToast(msg) {
+        const el = document.getElementById('toast');
+        el.textContent = msg;
+        el.classList.add('show');
+        clearTimeout(showToast._t);
+        showToast._t = setTimeout(() => el.classList.remove('show'), 2200);
+      }
+
+      function addXp(amount, source, referenceId) {
+        const stats = state.developerStats;
+        const prevLevel = levelFromTotalXp(stats.totalXp);
+        stats.totalXp += amount;
+        const newLevel = levelFromTotalXp(stats.totalXp);
+        stats.level = newLevel;
+        if (!stats.recentXpEvents) stats.recentXpEvents = [];
+        stats.recentXpEvents.unshift({
+          id: uid(),
+          at: nowIso(),
+          amount,
+          source,
+          referenceId,
+        });
+        stats.recentXpEvents = stats.recentXpEvents.slice(0, 20);
+        if (newLevel > prevLevel) showToast('🎉 레벨 업! Lv.' + newLevel);
+        else showToast('+' + amount + ' XP');
+      }
+
+      function xpBarHtml(totalXp) {
+        const p = xpProgressInLevel(totalXp);
+        return (
+          '<div class="xp-bar-wrap">' +
+          '<div class="xp-bar-label"><span>Lv.' +
+          p.level +
+          '</span><span>' +
+          p.currentInLevel +
+          ' / ' +
+          p.neededForLevel +
+          ' XP</span></div>' +
+          '<div class="xp-bar"><div class="xp-bar-fill" style="width:' +
+          p.percent +
+          '%"></div></div></div>'
+        );
+      }
+
+      function esc(s) {
+        if (s == null) return '';
+        return String(s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+         홈 대시보드
+      ═══════════════════════════════════════════════════════════════ */
+      function renderHome() {
+        const today = todayStr();
+        const todayQuests = [];
+        state.games.forEach((g) => {
+          g.checklist
+            .filter((c) => c.date === today)
+            .forEach((c) => todayQuests.push({ game: g.title, item: c }));
+        });
+
+        const recentLogs = [];
+        state.games.forEach((g) => {
+          g.accessLogs.forEach((log) => recentLogs.push({ game: g.title, log, gameId: g.id }));
+        });
+        recentLogs.sort((a, b) => (b.log.playedAt > a.log.playedAt ? 1 : -1));
+        const recent5 = recentLogs.slice(0, 5);
+
+        const activeProjects = state.devProjects.filter((p) => p.status === 'in_progress');
+        const openTasks = state.devProjects.reduce(
+          (n, p) => n + p.tasks.filter((t) => !t.done).length,
+          0
+        );
+        const stats = state.developerStats;
+
+        let questsHtml =
+          todayQuests.length === 0
+            ? '<p class="empty">오늘 등록된 일일 퀘스트가 없습니다.</p>'
+            : '<ul class="list">' +
+              todayQuests
+                .map(
+                  (q) =>
+                    '<li><label class="chk"><input type="checkbox" disabled' +
+                    (q.item.done ? ' checked' : '') +
+                    '><span class="' +
+                    (q.item.done ? 'done-text' : '') +
+                    '">[' +
+                    esc(q.game) +
+                    '] ' +
+                    esc(q.item.label) +
+                    '</span></label></li>'
+                )
+                .join('') +
+              '</ul>';
+
+        let recentHtml =
+          recent5.length === 0
+            ? '<p class="empty">접속 기록이 없습니다.</p>'
+            : '<ul class="list">' +
+              recent5
+                .map(
+                  (r) =>
+                    '<li><span><strong>' +
+                    esc(r.game) +
+                    '</strong> · ' +
+                    fmtDate(r.log.playedAt) +
+                    (r.log.memo ? ' — ' + esc(r.log.memo) : '') +
+                    '</span></li>'
+                )
+                .join('') +
+              '</ul>';
+
+        let projHtml =
+          activeProjects.length === 0
+            ? '<p class="empty">진행 중인 프로젝트가 없습니다.</p>'
+            : '<ul class="list">' +
+              activeProjects
+                .map(
+                  (p) =>
+                    '<li><strong>' +
+                    esc(p.name) +
+                    '</strong> <span class="badge badge-in_progress">진행중</span> · 작업 ' +
+                    p.tasks.filter((t) => !t.done).length +
+                    '개 남음</li>'
+                )
+                .join('') +
+              '</ul>';
+
+        return (
+          '<div class="section-title">🏠 홈 대시보드</div>' +
+          '<div class="grid-2">' +
+          '<div class="card"><h2>🎮 플레이어 요약</h2>' +
+          '<h3>오늘 일정 (' +
+          today +
+          ')</h3>' +
+          questsHtml +
+          '<h3 style="margin-top:0.75rem">최근 플레이</h3>' +
+          recentHtml +
+          '</div>' +
+          '<div class="card"><h2>🛠️ 개발자 요약</h2>' +
+          '<h3>진행 중 프로젝트</h3>' +
+          projHtml +
+          '<p class="muted" style="margin:0.5rem 0">미완료 작업: <strong>' +
+          openTasks +
+          '</strong>개</p>' +
+          xpBarHtml(stats.totalXp) +
+          '<p class="muted" style="margin-top:0.5rem">누적 XP: ' +
+          stats.totalXp +
+          '</p></div></div>'
+        );
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+         플레이어 페이지
+      ═══════════════════════════════════════════════════════════════ */
+      function renderPlayer() {
+        const games = state.games;
+        const sel = games.find((g) => g.id === selectedGameId);
+
+        let listHtml = games.length
+          ? games
+              .map(
+                (g) =>
+                  '<div class="game-item' +
+                  (g.id === selectedGameId ? ' selected' : '') +
+                  '" data-action="select-game" data-id="' +
+                  g.id +
+                  '"><strong>' +
+                  esc(g.title) +
+                  '</strong>' +
+                  (g.platform ? ' <span class="muted">· ' + esc(g.platform) + '</span>' : '') +
+                  '</div>'
+              )
+              .join('')
+          : '<p class="empty">등록된 게임이 없습니다.</p>';
+
+        let detailHtml = '';
+        if (sel) {
+          const today = todayStr();
+          const todayItems = sel.checklist.filter((c) => c.date === today);
+          const logs = [...sel.accessLogs].sort((a, b) =>
+            b.playedAt > a.playedAt ? 1 : -1
+          );
+
+          detailHtml =
+            '<div class="card">' +
+            '<h2>' +
+            esc(sel.title) +
+            '</h2>' +
+            '<div class="row">' +
+            '<input id="game-title-edit" value="' +
+            esc(sel.title) +
+            '">' +
+            '<input id="game-platform-edit" placeholder="플랫폼" value="' +
+            esc(sel.platform || '') +
+            '">' +
+            '<button class="btn btn-sm" data-action="save-game-meta" data-id="' +
+            sel.id +
+            '">저장</button>' +
+            '<button class="btn btn-sm btn-danger" data-action="delete-game" data-id="' +
+            sel.id +
+            '">삭제</button></div>' +
+            '<h3>📋 오늘의 퀘스트 (' +
+            today +
+            ')</h3>' +
+            '<div class="row"><input id="new-quest" placeholder="일일 퀘스트 추가">' +
+            '<button class="btn btn-sm btn-player" data-action="add-quest" data-id="' +
+            sel.id +
+            '">추가</button></div>' +
+            (todayItems.length
+              ? '<ul class="list">' +
+                todayItems
+                  .map(
+                    (c) =>
+                      '<li><label class="chk"><input type="checkbox" data-action="toggle-quest" data-gid="' +
+                      sel.id +
+                      '" data-cid="' +
+                      c.id +
+                      '"' +
+                      (c.done ? ' checked' : '') +
+                      '><span class="' +
+                      (c.done ? 'done-text' : '') +
+                      '">' +
+                      esc(c.label) +
+                      '</span></label>' +
+                      '<button class="btn btn-sm btn-danger" data-action="del-quest" data-gid="' +
+                      sel.id +
+                      '" data-cid="' +
+                      c.id +
+                      '">×</button></li>'
+                  )
+                  .join('') +
+                '</ul>'
+              : '<p class="empty">오늘 퀘스트 없음</p>') +
+            '<h3 style="margin-top:0.75rem">📝 게임 메모</h3>' +
+            '<textarea id="game-memo">' +
+            esc(sel.memo) +
+            '</textarea>' +
+            '<button class="btn btn-sm btn-player" data-action="save-memo" data-id="' +
+            sel.id +
+            '">메모 저장</button>' +
+            '<h3 style="margin-top:0.75rem">🕹️ 접속 기록</h3>' +
+            '<div class="row"><input id="access-memo" placeholder="메모 (선택)">' +
+            '<button class="btn btn-sm btn-player" data-action="add-access" data-id="' +
+            sel.id +
+            '">접속 기록</button></div>' +
+            (logs.length
+              ? '<ul class="list">' +
+                logs
+                  .map(
+                    (l) =>
+                      '<li>' +
+                      fmtDate(l.playedAt) +
+                      (l.memo ? ' — ' + esc(l.memo) : '') +
+                      '<button class="btn btn-sm btn-danger" style="margin-left:auto" data-action="del-access" data-gid="' +
+                      sel.id +
+                      '" data-lid="' +
+                      l.id +
+                      '">×</button></li>'
+                  )
+                  .join('') +
+                '</ul>'
+              : '<p class="empty">기록 없음</p>') +
+            '</div>';
+        } else if (games.length) {
+          detailHtml = '<p class="empty card">왼쪽에서 게임을 선택하세요.</p>';
+        }
+
+        return (
+          '<div class="section-title">🎮 플레이어</div>' +
+          '<div class="card"><h3>게임 등록</h3>' +
+          '<div class="row"><input id="new-game-title" placeholder="게임 이름">' +
+          '<input id="new-game-platform" placeholder="플랫폼 (선택)">' +
+          '<button class="btn btn-primary btn-player" data-action="add-game">등록</button></div></div>' +
+          '<div class="split"><div class="card"><h3>게임 목록</h3>' +
+          listHtml +
+          '</div><div>' +
+          detailHtml +
+          '</div></div>'
+        );
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+         개발자 페이지
+      ═══════════════════════════════════════════════════════════════ */
+      function renderDeveloper() {
+        const stats = state.developerStats;
+        const projects = state.devProjects;
+        const sel = projects.find((p) => p.id === selectedProjectId);
+        const journals = [...state.devJournals].sort((a, b) =>
+          b.createdAt > a.createdAt ? 1 : -1
+        );
+        const ideas = [...state.ideaMemos].sort((a, b) => {
+          if (a.pinned && !b.pinned) return -1;
+          if (!a.pinned && b.pinned) return 1;
+          return b.updatedAt > a.updatedAt ? 1 : -1;
+        });
+
+        let projList = projects.length
+          ? projects
+              .map(
+                (p) =>
+                  '<div class="project-item' +
+                  (p.id === selectedProjectId ? ' selected' : '') +
+                  '" data-action="select-project" data-id="' +
+                  p.id +
+                  '"><strong>' +
+                  esc(p.name) +
+                  '</strong> <span class="badge badge-' +
+                  p.status +
+                  '">' +
+                  statusLabel(p.status) +
+                  '</span></div>'
+              )
+              .join('')
+          : '<p class="empty">프로젝트 없음</p>';
+
+        let projDetail = '';
+        if (sel) {
+          const tasks = sel.tasks;
+          projDetail =
+            '<div class="card">' +
+            '<h2>' +
+            esc(sel.name) +
+            '</h2>' +
+            '<div class="row">' +
+            '<input id="proj-name" value="' +
+            esc(sel.name) +
+            '">' +
+            '<select id="proj-status">' +
+            ['planned', 'in_progress', 'completed']
+              .map(
+                (s) =>
+                  '<option value="' +
+                  s +
+                  '"' +
+                  (sel.status === s ? ' selected' : '') +
+                  '>' +
+                  statusLabel(s) +
+                  '</option>'
+              )
+              .join('') +
+            '</select>' +
+            '<button class="btn btn-sm btn-dev" data-action="save-project" data-id="' +
+            sel.id +
+            '">저장</button>' +
+            '<button class="btn btn-sm btn-danger" data-action="delete-project" data-id="' +
+            sel.id +
+            '">삭제</button></div>' +
+            '<textarea id="proj-desc" placeholder="설명">' +
+            esc(sel.description || '') +
+            '</textarea>' +
+            '<h3>작업 목록</h3>' +
+            '<div class="row"><input id="new-task" placeholder="작업 추가">' +
+            '<button class="btn btn-sm btn-dev" data-action="add-task" data-id="' +
+            sel.id +
+            '">추가</button></div>' +
+            (tasks.length
+              ? '<ul class="list">' +
+                tasks
+                  .map(
+                    (t) =>
+                      '<li><label class="chk"><input type="checkbox" data-action="toggle-task" data-pid="' +
+                      sel.id +
+                      '" data-tid="' +
+                      t.id +
+                      '"' +
+                      (t.done ? ' checked' : '') +
+                      '><span class="' +
+                      (t.done ? 'done-text' : '') +
+                      '">' +
+                      esc(t.title) +
+                      '</span></label>' +
+                      '<button class="btn btn-sm btn-danger" data-action="del-task" data-pid="' +
+                      sel.id +
+                      '" data-tid="' +
+                      t.id +
+                      '">×</button></li>'
+                  )
+                  .join('') +
+                '</ul>'
+              : '<p class="empty">작업 없음</p>') +
+            '</div>';
+        } else if (projects.length) {
+          projDetail = '<p class="empty card">프로젝트를 선택하세요.</p>';
+        }
+
+        const journalHtml =
+          journals.length === 0
+            ? '<p class="empty">일지 없음</p>'
+            : journals
+                .map((j) => {
+                  const proj = j.projectId
+                    ? state.devProjects.find((p) => p.id === j.projectId)
+                    : null;
+                  return (
+                    '<div class="card" style="padding:0.75rem">' +
+                    '<strong>' +
+                    esc(j.title) +
+                    '</strong>' +
+                    (proj ? ' <span class="muted">· ' + esc(proj.name) + '</span>' : '') +
+                    '<p class="muted">' +
+                    fmtDate(j.createdAt) +
+                    '</p><p style="font-size:0.88rem;margin:0.35rem 0">' +
+                    esc(j.body) +
+                    '</p>' +
+                    '<button class="btn btn-sm btn-danger" data-action="del-journal" data-id="' +
+                    j.id +
+                    '">삭제</button></div>'
+                  );
+                })
+                .join('');
+
+        const ideaHtml =
+          ideas.length === 0
+            ? '<p class="empty">메모 없음</p>'
+            : ideas
+                .map(
+                  (m) =>
+                    '<div class="card" style="padding:0.75rem">' +
+                    (m.pinned ? '📌 ' : '') +
+                    '<strong>' +
+                    esc(m.title) +
+                    '</strong><p style="font-size:0.88rem;margin:0.35rem 0">' +
+                    esc(m.body) +
+                    '</p>' +
+                    '<button class="btn btn-sm" data-action="toggle-pin" data-id="' +
+                    m.id +
+                    '">' +
+                    (m.pinned ? '고정 해제' : '고정') +
+                    '</button> ' +
+                    '<button class="btn btn-sm btn-danger" data-action="del-idea" data-id="' +
+                    m.id +
+                    '">삭제</button></div>'
+                )
+                .join('');
+
+        const events = (stats.recentXpEvents || []).slice(0, 5);
+        const eventsHtml =
+          events.length === 0
+            ? '<p class="empty">XP 기록 없음</p>'
+            : '<ul class="list">' +
+              events
+                .map(
+                  (e) =>
+                    '<li>+' +
+                    e.amount +
+                    ' XP · ' +
+                    (e.source === 'task_complete' ? '작업 완료' : '일지 작성') +
+                    ' · ' +
+                    fmtDate(e.at) +
+                    '</li>'
+                )
+                .join('') +
+              '</ul>';
+
+        return (
+          '<div class="section-title">🛠️ 개발자</div>' +
+          '<div class="card"><h2>RPG 스탯</h2>' +
+          xpBarHtml(stats.totalXp) +
+          '<p class="muted">누적 ' +
+          stats.totalXp +
+          ' XP · 작업 완료 +' +
+          XP_REWARDS.task_complete +
+          ' · 일지 +' +
+          XP_REWARDS.journal_write +
+          '</p><h3 style="margin-top:0.65rem">최근 XP</h3>' +
+          eventsHtml +
+          '</div>' +
+          '<div class="card"><h3>프로젝트 등록</h3>' +
+          '<div class="row"><input id="new-proj-name" placeholder="프로젝트명">' +
+          '<button class="btn btn-dev" data-action="add-project">등록</button></div></div>' +
+          '<div class="split"><div class="card"><h3>프로젝트</h3>' +
+          projList +
+          '</div><div>' +
+          projDetail +
+          '</div></div>' +
+          '<div class="card"><h3>📓 개발 일지 작성 (+10 XP)</h3>' +
+          '<input id="journal-title" placeholder="제목">' +
+          '<select id="journal-project"><option value="">프로젝트 (선택)</option>' +
+          projects
+            .map((p) => '<option value="' + p.id + '">' + esc(p.name) + '</option>')
+            .join('') +
+          '</select><textarea id="journal-body" placeholder="오늘 한 일..."></textarea>' +
+          '<button class="btn btn-dev" data-action="add-journal">일지 저장</button></div>' +
+          '<div class="card"><h3>일지 목록</h3>' +
+          journalHtml +
+          '</div>' +
+          '<div class="card"><h3>💡 아이디어 메모</h3>' +
+          '<input id="idea-title" placeholder="제목">' +
+          '<textarea id="idea-body" placeholder="아이디어..."></textarea>' +
+          '<button class="btn btn-dev" data-action="add-idea">메모 추가</button>' +
+          '<div style="margin-top:0.75rem">' +
+          ideaHtml +
+          '</div></div>'
+        );
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+         액션 핸들러
+      ═══════════════════════════════════════════════════════════════ */
+      function baseEntity() {
+        const t = nowIso();
+        return { id: uid(), createdAt: t, updatedAt: t };
+      }
+
+      const actions = {
+        'nav-view'(el) {
+          currentView = el.dataset.view;
+          render();
+        },
+        'add-game'() {
+          const title = document.getElementById('new-game-title').value.trim();
+          if (!title) return alert('게임 이름을 입력하세요.');
+          const g = {
+            ...baseEntity(),
+            title,
+            platform: document.getElementById('new-game-platform').value.trim() || undefined,
+            memo: '',
+            checklist: [],
+            accessLogs: [],
+          };
+          state.games.push(g);
+          selectedGameId = g.id;
+          persist();
+        },
+        'select-game'(el) {
+          selectedGameId = el.dataset.id;
+          render();
+        },
+        'delete-game'(el) {
+          if (!confirm('이 게임을 삭제할까요?')) return;
+          state.games = state.games.filter((g) => g.id !== el.dataset.id);
+          if (selectedGameId === el.dataset.id) selectedGameId = null;
+          persist();
+        },
+        'save-game-meta'(el) {
+          const g = state.games.find((x) => x.id === el.dataset.id);
+          if (!g) return;
+          g.title = document.getElementById('game-title-edit').value.trim() || g.title;
+          g.platform = document.getElementById('game-platform-edit').value.trim() || undefined;
+          g.updatedAt = nowIso();
+          persist();
+        },
+        'add-quest'(el) {
+          const g = state.games.find((x) => x.id === el.dataset.id);
+          const label = document.getElementById('new-quest').value.trim();
+          if (!g || !label) return;
+          g.checklist.push({
+            ...baseEntity(),
+            label,
+            done: false,
+            date: todayStr(),
+          });
+          g.updatedAt = nowIso();
+          persist();
+        },
+        'toggle-quest'(el) {
+          const g = state.games.find((x) => x.id === el.dataset.gid);
+          const c = g && g.checklist.find((x) => x.id === el.dataset.cid);
+          if (!c) return;
+          c.done = el.checked;
+          c.updatedAt = nowIso();
+          g.updatedAt = nowIso();
+          persist();
+        },
+        'del-quest'(el) {
+          const g = state.games.find((x) => x.id === el.dataset.gid);
+          if (!g) return;
+          g.checklist = g.checklist.filter((c) => c.id !== el.dataset.cid);
+          g.updatedAt = nowIso();
+          persist();
+        },
+        'save-memo'(el) {
+          const g = state.games.find((x) => x.id === el.dataset.id);
+          if (!g) return;
+          g.memo = document.getElementById('game-memo').value;
+          g.updatedAt = nowIso();
+          persist();
+        },
+        'add-access'(el) {
+          const g = state.games.find((x) => x.id === el.dataset.id);
+          if (!g) return;
+          g.accessLogs.unshift({
+            id: uid(),
+            playedAt: nowIso(),
+            memo: document.getElementById('access-memo').value.trim() || undefined,
+          });
+          g.updatedAt = nowIso();
+          document.getElementById('access-memo').value = '';
+          persist();
+        },
+        'del-access'(el) {
+          const g = state.games.find((x) => x.id === el.dataset.gid);
+          if (!g) return;
+          g.accessLogs = g.accessLogs.filter((l) => l.id !== el.dataset.lid);
+          g.updatedAt = nowIso();
+          persist();
+        },
+        'add-project'() {
+          const name = document.getElementById('new-proj-name').value.trim();
+          if (!name) return alert('프로젝트명을 입력하세요.');
+          const p = {
+            ...baseEntity(),
+            name,
+            status: 'planned',
+            tasks: [],
+          };
+          state.devProjects.push(p);
+          selectedProjectId = p.id;
+          persist();
+        },
+        'select-project'(el) {
+          selectedProjectId = el.dataset.id;
+          render();
+        },
+        'save-project'(el) {
+          const p = state.devProjects.find((x) => x.id === el.dataset.id);
+          if (!p) return;
+          p.name = document.getElementById('proj-name').value.trim() || p.name;
+          p.status = document.getElementById('proj-status').value;
+          p.description = document.getElementById('proj-desc').value.trim() || undefined;
+          p.updatedAt = nowIso();
+          persist();
+        },
+        'delete-project'(el) {
+          if (!confirm('프로젝트를 삭제할까요?')) return;
+          state.devProjects = state.devProjects.filter((p) => p.id !== el.dataset.id);
+          if (selectedProjectId === el.dataset.id) selectedProjectId = null;
+          persist();
+        },
+        'add-task'(el) {
+          const p = state.devProjects.find((x) => x.id === el.dataset.id);
+          const title = document.getElementById('new-task').value.trim();
+          if (!p || !title) return;
+          p.tasks.push({ ...baseEntity(), title, done: false });
+          p.updatedAt = nowIso();
+          persist();
+        },
+        'toggle-task'(el) {
+          const p = state.devProjects.find((x) => x.id === el.dataset.pid);
+          const t = p && p.tasks.find((x) => x.id === el.dataset.tid);
+          if (!t) return;
+          t.done = el.checked;
+          t.updatedAt = nowIso();
+          if (t.done && !t.completedAt) {
+            t.completedAt = nowIso();
+            addXp(XP_REWARDS.task_complete, 'task_complete', t.id);
+          }
+          p.updatedAt = nowIso();
+          persist();
+        },
+        'del-task'(el) {
+          const p = state.devProjects.find((x) => x.id === el.dataset.pid);
+          if (!p) return;
+          p.tasks = p.tasks.filter((t) => t.id !== el.dataset.tid);
+          p.updatedAt = nowIso();
+          persist();
+        },
+        'add-journal'() {
+          const title = document.getElementById('journal-title').value.trim();
+          const body = document.getElementById('journal-body').value.trim();
+          if (!title || !body) return alert('제목과 내용을 입력하세요.');
+          const pid = document.getElementById('journal-project').value || undefined;
+          const j = {
+            ...baseEntity(),
+            projectId: pid,
+            title,
+            body,
+            xpAwarded: true,
+          };
+          state.devJournals.unshift(j);
+          addXp(XP_REWARDS.journal_write, 'journal_write', j.id);
+          document.getElementById('journal-title').value = '';
+          document.getElementById('journal-body').value = '';
+          persist();
+        },
+        'del-journal'(el) {
+          state.devJournals = state.devJournals.filter((j) => j.id !== el.dataset.id);
+          persist();
+        },
+        'add-idea'() {
+          const title = document.getElementById('idea-title').value.trim();
+          const body = document.getElementById('idea-body').value.trim();
+          if (!title) return alert('제목을 입력하세요.');
+          state.ideaMemos.unshift({
+            ...baseEntity(),
+            title,
+            body: body || '',
+            pinned: false,
+          });
+          document.getElementById('idea-title').value = '';
+          document.getElementById('idea-body').value = '';
+          persist();
+        },
+        'toggle-pin'(el) {
+          const m = state.ideaMemos.find((x) => x.id === el.dataset.id);
+          if (!m) return;
+          m.pinned = !m.pinned;
+          m.updatedAt = nowIso();
+          persist();
+        },
+        'del-idea'(el) {
+          state.ideaMemos = state.ideaMemos.filter((m) => m.id !== el.dataset.id);
+          persist();
+        },
+      };
+
+      document.body.addEventListener('click', (e) => {
+        const el = e.target.closest('[data-action]');
+        if (!el) return;
+        const fn = actions[el.dataset.action];
+        if (fn) fn(el);
+      });
+
+      document.body.addEventListener('change', (e) => {
+        if (e.target.dataset.action) {
+          const fn = actions[e.target.dataset.action];
+          if (fn) fn(e.target);
+        }
+      });
+
+      /* ═══════════════════════════════════════════════════════════════
+         렌더
+      ═══════════════════════════════════════════════════════════════ */
+      function renderNav() {
+        const views = [
+          { id: 'home', label: '🏠 홈' },
+          { id: 'player', label: '🎮 플레이어' },
+          { id: 'developer', label: '🛠️ 개발자' },
+        ];
+        document.getElementById('nav').innerHTML = views
+          .map(
+            (v) =>
+              '<button type="button" data-action="nav-view" data-view="' +
+              v.id +
+              '" class="' +
+              (currentView === v.id ? 'active' : '') +
+              '">' +
+              v.label +
+              '</button>'
+          )
+          .join('');
+      }
+
+      function render() {
+        renderNav();
+        const main = document.getElementById('main');
+        if (currentView === 'home') main.innerHTML = renderHome();
+        else if (currentView === 'player') main.innerHTML = renderPlayer();
+        else main.innerHTML = renderDeveloper();
+      }
+
+      render();
+    </script>
   </body>
 </html>
