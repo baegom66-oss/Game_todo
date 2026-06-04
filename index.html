@@ -195,6 +195,61 @@
         align-items: center;
         gap: 0.5rem;
       }
+      .badge-backlog { color: #93c5fd; }
+      .badge-design { color: #c4b5fd; }
+      .badge-dev { color: var(--dev); }
+      .badge-test { color: #fb923c; }
+      .badge-polish { color: #f472b6; }
+      .badge-released { color: var(--player); }
+      .badge-hold { color: var(--muted); }
+      .progress-block { margin: 0.5rem 0 0.75rem; }
+      .progress-block input[type='range'] { width: 100%; margin: 0.35rem 0; }
+      .progress-block .progress-val { font-size: 0.85rem; color: var(--dev); font-weight: 600; }
+      .task-row { flex-wrap: wrap; align-items: center !important; }
+      .task-row input.task-title-input { flex: 1; min-width: 140px; margin-bottom: 0; }
+      .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
+      }
+      .stat-box {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0.55rem 0.65rem;
+        text-align: center;
+      }
+      .stat-box .num { font-size: 1.25rem; font-weight: 700; color: var(--player); }
+      .stat-box .lbl { font-size: 0.72rem; color: var(--muted); }
+      .chart-wrap {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0.65rem;
+        margin-top: 0.5rem;
+      }
+      .chart-wrap canvas { width: 100%; height: auto; display: block; }
+      .chart-legend { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; font-size: 0.78rem; margin-top: 0.5rem; }
+      .chart-legend span::before {
+        content: '';
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 2px;
+        margin-right: 0.35rem;
+        vertical-align: middle;
+      }
+      .compare-table { width: 100%; font-size: 0.82rem; border-collapse: collapse; }
+      .compare-table th, .compare-table td {
+        padding: 0.4rem 0.5rem;
+        border-bottom: 1px solid var(--border);
+        text-align: left;
+      }
+      .compare-table th { color: var(--muted); font-weight: 600; }
+      .event-item { font-size: 0.88rem; padding: 0.5rem 0; border-bottom: 1px solid var(--border); }
+      .tabs-inline { display: flex; gap: 0.35rem; margin-bottom: 0.65rem; flex-wrap: wrap; }
+      .tabs-inline button.active { border-color: var(--player); color: var(--player); }
     </style>
   </head>
   <body>
@@ -213,21 +268,90 @@
       ═══════════════════════════════════════════════════════════════ */
       const STORAGE_KEY = 'game-life-manager:v1';
 
+      const PROJECT_STATUSES = [
+        { id: 'backlog', label: '백로그', hasPercent: false },
+        { id: 'design', label: '기획', hasPercent: false },
+        { id: 'dev', label: '개발 중', hasPercent: true },
+        { id: 'test', label: '테스트', hasPercent: true },
+        { id: 'polish', label: '마감/폴리시', hasPercent: true },
+        { id: 'released', label: '출시 완료', hasPercent: false },
+        { id: 'hold', label: '보류', hasPercent: false },
+      ];
+
       function createInitialAppData() {
         return {
-          version: 1,
+          version: 2,
           games: [],
           devProjects: [],
-          devJournals: [],
-          ideaMemos: [],
           developerStats: { totalXp: 0, level: 1, recentXpEvents: [] },
         };
+      }
+
+      function migrateAppData(parsed) {
+        if (!parsed || typeof parsed !== 'object') return createInitialAppData();
+
+        parsed.games = (parsed.games || []).map((g) => ({
+          ...g,
+          events: g.events || [],
+          weeklyGoal: g.weeklyGoal != null ? g.weeklyGoal : 3,
+          accessLogs: g.accessLogs || [],
+          checklist: g.checklist || [],
+          memo: g.memo || '',
+        }));
+
+        const statusMap = {
+          planned: 'backlog',
+          in_progress: 'dev',
+          completed: 'released',
+        };
+
+        parsed.devProjects = (parsed.devProjects || []).map((p) => {
+          const st = statusMap[p.status] || p.status || 'backlog';
+          const def = PROJECT_STATUSES.find((s) => s.id === st) || PROJECT_STATUSES[0];
+          return {
+            ...p,
+            status: st,
+            progressPercent: def.hasPercent
+              ? Math.min(100, Math.max(0, p.progressPercent ?? 0))
+              : undefined,
+            ideas: p.ideas || [],
+            tasks: p.tasks || [],
+          };
+        });
+
+        if (parsed.ideaMemos && parsed.ideaMemos.length) {
+          parsed.ideaMemos.forEach((m) => {
+            const pid = m.projectId;
+            const proj = pid && parsed.devProjects.find((x) => x.id === pid);
+            const idea = {
+              id: m.id || uid(),
+              title: m.title || '',
+              body: m.body || '',
+              pinned: !!m.pinned,
+              createdAt: m.createdAt || nowIso(),
+              updatedAt: m.updatedAt || nowIso(),
+            };
+            if (proj) proj.ideas.push(idea);
+            else if (parsed.devProjects[0]) parsed.devProjects[0].ideas.push(idea);
+          });
+        }
+
+        delete parsed.devJournals;
+        delete parsed.ideaMemos;
+        parsed.version = 2;
+        parsed.developerStats = parsed.developerStats || {
+          totalXp: 0,
+          level: 1,
+          recentXpEvents: [],
+        };
+        return parsed;
       }
 
       /* ═══════════════════════════════════════════════════════════════
          RPG (src/types/rpg.ts)
       ═══════════════════════════════════════════════════════════════ */
-      const XP_REWARDS = { task_complete: 5, journal_write: 10 };
+      const XP_REWARDS = { task_complete: 5 };
+      let chartWeeks = 8;
       const LEVEL_THRESHOLDS = [0, 100, 250, 450, 700, 1000, 1350, 1750, 2200, 2700];
 
       function thresholdForLevel(level) {
@@ -275,7 +399,7 @@
           const raw = localStorage.getItem(STORAGE_KEY);
           if (!raw) return createInitialAppData();
           const parsed = JSON.parse(raw);
-          if (parsed && parsed.version === 1) return parsed;
+          if (parsed) return migrateAppData(parsed);
         } catch (e) {
           console.warn('load failed', e);
         }
@@ -319,7 +443,165 @@
       }
 
       function statusLabel(s) {
-        return { planned: '예정', in_progress: '진행중', completed: '완료' }[s] || s;
+        const found = PROJECT_STATUSES.find((x) => x.id === s);
+        if (found) return found.label;
+        return { planned: '백로그', in_progress: '개발 중', completed: '출시 완료' }[s] || s;
+      }
+
+      function statusDisplay(p) {
+        let t = statusLabel(p.status);
+        const def = PROJECT_STATUSES.find((s) => s.id === p.status);
+        if (def && def.hasPercent && p.progressPercent != null) {
+          t += ' ' + p.progressPercent + '%';
+        }
+        return t;
+      }
+
+      function isActiveProject(p) {
+        return ['dev', 'test', 'polish', 'design'].includes(p.status);
+      }
+
+      function weekKey(d) {
+        const x = new Date(d);
+        const day = x.getDay();
+        const diff = x.getDate() - day + (day === 0 ? -6 : 1);
+        const mon = new Date(x.setDate(diff));
+        return mon.toISOString().slice(0, 10);
+      }
+
+      function getWeekLabels(n) {
+        const labels = [];
+        const now = new Date();
+        for (let i = n - 1; i >= 0; i--) {
+          const d = new Date(now);
+          d.setDate(d.getDate() - i * 7);
+          labels.push(weekKey(d.toISOString()));
+        }
+        return labels;
+      }
+
+      function countAccessByWeek(game, weeks) {
+        const labels = getWeekLabels(weeks);
+        const counts = labels.map(() => 0);
+        (game.accessLogs || []).forEach((log) => {
+          const wk = weekKey(log.playedAt);
+          const idx = labels.indexOf(wk);
+          if (idx >= 0) counts[idx]++;
+        });
+        return { labels, counts };
+      }
+
+      function accessRateThisWeek(game) {
+        const goal = game.weeklyGoal || 3;
+        const labels = getWeekLabels(1);
+        const wk = labels[0];
+        const count = (game.accessLogs || []).filter((l) => weekKey(l.playedAt) === wk).length;
+        const pct = goal <= 0 ? 0 : Math.min(100, Math.round((count / goal) * 100));
+        return { count, goal, pct };
+      }
+
+      function avgDaysBetweenAccess(game) {
+        const logs = [...(game.accessLogs || [])].sort((a, b) =>
+          a.playedAt > b.playedAt ? 1 : -1
+        );
+        if (logs.length < 2) return null;
+        let sum = 0;
+        for (let i = 1; i < logs.length; i++) {
+          sum +=
+            (new Date(logs[i].playedAt) - new Date(logs[i - 1].playedAt)) / 86400000;
+        }
+        return (sum / (logs.length - 1)).toFixed(1);
+      }
+
+      function drawWeeklyChart(canvasId, games, weeks) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas || !games.length) return;
+        const labels = getWeekLabels(weeks);
+        const series = games.map((g, i) => ({
+          game: g,
+          color: ['#34d399', '#5ce1e6', '#a78bfa', '#fbbf24', '#f87171', '#fb923c'][i % 6],
+          counts: countAccessByWeek(g, weeks).counts,
+        }));
+        const max = Math.max(1, ...series.flatMap((s) => s.counts));
+        const dpr = window.devicePixelRatio || 1;
+        const W = canvas.clientWidth || 600;
+        const H = 200;
+        canvas.width = W * dpr;
+        canvas.height = H * dpr;
+        const ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
+        ctx.fillStyle = '#0f1419';
+        ctx.fillRect(0, 0, W, H);
+        const pad = { l: 36, r: 12, t: 12, b: 28 };
+        const plotW = W - pad.l - pad.r;
+        const plotH = H - pad.t - pad.b;
+        const barGroupW = plotW / labels.length;
+        const barW = Math.max(4, (barGroupW / series.length) * 0.7);
+        ctx.strokeStyle = '#2d3a4f';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 4; i++) {
+          const y = pad.t + (plotH * i) / 4;
+          ctx.beginPath();
+          ctx.moveTo(pad.l, y);
+          ctx.lineTo(W - pad.r, y);
+          ctx.stroke();
+          ctx.fillStyle = '#8b9cb3';
+          ctx.font = '10px sans-serif';
+          ctx.textAlign = 'right';
+          ctx.fillText(String(Math.round(max - (max * i) / 4)), pad.l - 4, y + 3);
+        }
+        labels.forEach((lb, wi) => {
+          const gx = pad.l + wi * barGroupW + barGroupW / 2;
+          ctx.fillStyle = '#8b9cb3';
+          ctx.font = '9px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(lb.slice(5), gx, H - 6);
+          series.forEach((s, si) => {
+            const v = s.counts[wi];
+            const bh = (v / max) * plotH;
+            const x = pad.l + wi * barGroupW + si * barW + (barGroupW - series.length * barW) / 2;
+            const y = pad.t + plotH - bh;
+            ctx.fillStyle = s.color;
+            ctx.fillRect(x, y, barW, bh);
+          });
+        });
+      }
+
+      function drawTrendLine(canvasId, game, weeks) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        const { counts } = countAccessByWeek(game, weeks);
+        const max = Math.max(1, ...counts);
+        const dpr = window.devicePixelRatio || 1;
+        const W = canvas.clientWidth || 400;
+        const H = 140;
+        canvas.width = W * dpr;
+        canvas.height = H * dpr;
+        const ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
+        ctx.fillStyle = '#0f1419';
+        ctx.fillRect(0, 0, W, H);
+        const pad = { l: 28, r: 12, t: 12, b: 24 };
+        const plotW = W - pad.l - pad.r;
+        const plotH = H - pad.t - pad.b;
+        const pts = counts.map((v, i) => ({
+          x: pad.l + (i / Math.max(1, counts.length - 1)) * plotW,
+          y: pad.t + plotH - (v / max) * plotH,
+        }));
+        ctx.strokeStyle = '#34d399';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        pts.forEach((p, i) => {
+          if (i === 0) ctx.moveTo(p.x, p.y);
+          else ctx.lineTo(p.x, p.y);
+        });
+        ctx.stroke();
+        pts.forEach((p) => {
+          ctx.fillStyle = '#34d399';
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+          ctx.fill();
+        });
       }
 
       function showToast(msg) {
@@ -394,7 +676,7 @@
         recentLogs.sort((a, b) => (b.log.playedAt > a.log.playedAt ? 1 : -1));
         const recent5 = recentLogs.slice(0, 5);
 
-        const activeProjects = state.devProjects.filter((p) => p.status === 'in_progress');
+        const activeProjects = state.devProjects.filter(isActiveProject);
         const openTasks = state.devProjects.reduce(
           (n, p) => n + p.tasks.filter((t) => !t.done).length,
           0
@@ -417,6 +699,37 @@
                     '] ' +
                     esc(q.item.label) +
                     '</span></label></li>'
+                )
+                .join('') +
+              '</ul>';
+
+        const upcomingEvents = [];
+        state.games.forEach((g) => {
+          (g.events || []).forEach((ev) => {
+            const end = ev.endDate || ev.startDate;
+            if (end >= today) upcomingEvents.push({ game: g.title, ev });
+          });
+        });
+        upcomingEvents.sort((a, b) =>
+          (a.ev.startDate || '') > (b.ev.startDate || '') ? 1 : -1
+        );
+
+        let eventsHomeHtml =
+          upcomingEvents.length === 0
+            ? '<p class="empty">예정 이벤트 없음</p>'
+            : '<ul class="list">' +
+              upcomingEvents
+                .slice(0, 5)
+                .map(
+                  (x) =>
+                    '<li><strong>' +
+                    esc(x.ev.title) +
+                    '</strong> [' +
+                    esc(x.game) +
+                    '] · ' +
+                    esc(x.ev.startDate) +
+                    (x.ev.endDate ? '~' + esc(x.ev.endDate) : '') +
+                    '</li>'
                 )
                 .join('') +
               '</ul>';
@@ -447,7 +760,11 @@
                   (p) =>
                     '<li><strong>' +
                     esc(p.name) +
-                    '</strong> <span class="badge badge-in_progress">진행중</span> · 작업 ' +
+                    '</strong> <span class="badge badge-' +
+                    p.status +
+                    '">' +
+                    statusDisplay(p) +
+                    '</span> · 작업 ' +
                     p.tasks.filter((t) => !t.done).length +
                     '개 남음</li>'
                 )
@@ -462,6 +779,8 @@
           today +
           ')</h3>' +
           questsHtml +
+          '<h3 style="margin-top:0.75rem">예정 이벤트</h3>' +
+          eventsHomeHtml +
           '<h3 style="margin-top:0.75rem">최근 플레이</h3>' +
           recentHtml +
           '</div>' +
@@ -487,8 +806,9 @@
 
         let listHtml = games.length
           ? games
-              .map(
-                (g) =>
+              .map((g) => {
+                const rate = accessRateThisWeek(g);
+                return (
                   '<div class="game-item' +
                   (g.id === selectedGameId ? ' selected' : '') +
                   '" data-action="select-game" data-id="' +
@@ -497,8 +817,15 @@
                   esc(g.title) +
                   '</strong>' +
                   (g.platform ? ' <span class="muted">· ' + esc(g.platform) + '</span>' : '') +
-                  '</div>'
-              )
+                  '<br><span class="muted" style="font-size:0.78rem">이번 주 접속률 ' +
+                  rate.pct +
+                  '% (' +
+                  rate.count +
+                  '/' +
+                  rate.goal +
+                  ')</span></div>'
+                );
+              })
               .join('')
           : '<p class="empty">등록된 게임이 없습니다.</p>';
 
@@ -506,9 +833,35 @@
         if (sel) {
           const today = todayStr();
           const todayItems = sel.checklist.filter((c) => c.date === today);
-          const logs = [...sel.accessLogs].sort((a, b) =>
+          const logs = [...(sel.accessLogs || [])].sort((a, b) =>
             b.playedAt > a.playedAt ? 1 : -1
           );
+          const events = [...(sel.events || [])].sort((a, b) =>
+            (b.startDate || '') > (a.startDate || '') ? 1 : -1
+          );
+          const rate = accessRateThisWeek(sel);
+          const avgGap = avgDaysBetweenAccess(sel);
+          const totalSessions = (sel.accessLogs || []).length;
+
+          const eventsHtml = events.length
+            ? events
+                .map(
+                  (ev) =>
+                    '<div class="event-item"><strong>' +
+                    esc(ev.title) +
+                    '</strong> <span class="muted">' +
+                    esc(ev.startDate) +
+                    (ev.endDate ? ' ~ ' + esc(ev.endDate) : '') +
+                    '</span>' +
+                    (ev.note ? '<p class="muted" style="margin-top:0.2rem">' + esc(ev.note) + '</p>' : '') +
+                    '<button class="btn btn-sm btn-danger" data-action="del-event" data-gid="' +
+                    sel.id +
+                    '" data-eid="' +
+                    ev.id +
+                    '">삭제</button></div>'
+                )
+                .join('')
+            : '<p class="empty">등록된 이벤트 없음</p>';
 
           detailHtml =
             '<div class="card">' +
@@ -528,6 +881,28 @@
             '<button class="btn btn-sm btn-danger" data-action="delete-game" data-id="' +
             sel.id +
             '">삭제</button></div>' +
+            '<div class="stat-grid" style="margin-top:0.65rem">' +
+            '<div class="stat-box"><div class="num">' +
+            rate.pct +
+            '%</div><div class="lbl">이번 주 접속률</div></div>' +
+            '<div class="stat-box"><div class="num">' +
+            rate.count +
+            '/' +
+            rate.goal +
+            '</div><div class="lbl">주간 접속</div></div>' +
+            '<div class="stat-box"><div class="num">' +
+            totalSessions +
+            '</div><div class="lbl">총 접속</div></div>' +
+            '<div class="stat-box"><div class="num">' +
+            (avgGap != null ? avgGap + '일' : '—') +
+            '</div><div class="lbl">평균 접속 간격</div></div></div>' +
+            '<div class="row"><label class="muted" style="font-size:0.85rem">주간 목표 접속 횟수</label>' +
+            '<input type="number" id="weekly-goal" min="1" max="30" value="' +
+            (sel.weeklyGoal || 3) +
+            '" style="max-width:80px">' +
+            '<button class="btn btn-sm btn-player" data-action="save-weekly-goal" data-id="' +
+            sel.id +
+            '">적용</button></div>' +
             '<h3>📋 오늘의 퀘스트 (' +
             today +
             ')</h3>' +
@@ -560,6 +935,19 @@
                   .join('') +
                 '</ul>'
               : '<p class="empty">오늘 퀘스트 없음</p>') +
+            '<h3 style="margin-top:0.75rem">🎪 게임 이벤트</h3>' +
+            '<div class="row"><input id="event-title" placeholder="이벤트명">' +
+            '<input type="date" id="event-start" value="' +
+            today +
+            '"></div>' +
+            '<div class="row"><input type="date" id="event-end" placeholder="종료일 (선택)">' +
+            '<input id="event-note" placeholder="메모 (선택)"></div>' +
+            '<button class="btn btn-sm btn-player" data-action="add-event" data-id="' +
+            sel.id +
+            '">이벤트 추가</button>' +
+            '<div style="margin-top:0.5rem">' +
+            eventsHtml +
+            '</div>' +
             '<h3 style="margin-top:0.75rem">📝 게임 메모</h3>' +
             '<textarea id="game-memo">' +
             esc(sel.memo) +
@@ -589,12 +977,100 @@
                   .join('') +
                 '</ul>'
               : '<p class="empty">기록 없음</p>') +
+            '<h3 style="margin-top:0.75rem">📈 접속 추이 (' +
+            chartWeeks +
+            '주)</h3>' +
+            '<div class="chart-wrap"><canvas id="chart-trend-sel" height="140"></canvas></div>' +
             '</div>';
         } else if (games.length) {
           detailHtml = '<p class="empty card">왼쪽에서 게임을 선택하세요.</p>';
         }
 
-        return (
+        let compareRows = '';
+        if (games.length) {
+          const weekLabels = getWeekLabels(chartWeeks);
+          const thisWk = weekLabels[weekLabels.length - 1];
+          compareRows = games
+            .map((g) => {
+              const rate = accessRateThisWeek(g);
+              const thisWeekCount = (g.accessLogs || []).filter(
+                (l) => weekKey(l.playedAt) === thisWk
+              ).length;
+              const prevWeekCount = (g.accessLogs || []).filter(
+                (l) => weekKey(l.playedAt) === weekLabels[weekLabels.length - 2]
+              ).length;
+              const trend =
+                thisWeekCount > prevWeekCount
+                  ? '↑'
+                  : thisWeekCount < prevWeekCount
+                    ? '↓'
+                    : '→';
+              const avg4 =
+                countAccessByWeek(g, 4).counts.reduce((a, b) => a + b, 0) / 4;
+              return (
+                '<tr><td>' +
+                esc(g.title) +
+                '</td><td>' +
+                rate.pct +
+                '%</td><td>' +
+                thisWeekCount +
+                '</td><td>' +
+                avg4.toFixed(1) +
+                '</td><td>' +
+                trend +
+                '</td><td>' +
+                (g.accessLogs || []).length +
+                '</td></tr>'
+              );
+            })
+            .join('');
+        }
+
+        const legendHtml = games
+          .map((g, i) => {
+            const colors = ['#34d399', '#5ce1e6', '#a78bfa', '#fbbf24', '#f87171'];
+            return (
+              '<span style="--c:' +
+              colors[i % colors.length] +
+              '"><span style="background:' +
+              colors[i % colors.length] +
+              ';width:10px;height:10px;display:inline-block;border-radius:2px;margin-right:4px"></span>' +
+              esc(g.title) +
+              '</span>'
+            );
+          })
+          .join('');
+
+        const analyticsHtml =
+          games.length === 0
+            ? ''
+            : '<div class="card"><h2>📊 접속률 · 비교 · 추이</h2>' +
+              '<div class="tabs-inline">' +
+              [4, 8, 12]
+                .map(
+                  (w) =>
+                    '<button type="button" class="btn btn-sm' +
+                    (chartWeeks === w ? ' active' : '') +
+                    '" data-action="set-chart-weeks" data-weeks="' +
+                    w +
+                    '">' +
+                    w +
+                    '주</button>'
+                )
+                .join('') +
+              '</div>' +
+              '<p class="muted">게임별 주간 접속 횟수 막대 · 목표 대비 접속률 · 전주 대비 추세</p>' +
+              '<div class="chart-wrap"><canvas id="chart-compare-all" height="200"></canvas></div>' +
+              '<div class="chart-legend">' +
+              legendHtml +
+              '</div>' +
+              '<table class="compare-table" style="margin-top:0.85rem"><thead><tr>' +
+              '<th>게임</th><th>이번 주 접속률</th><th>이번 주 횟수</th><th>4주 평균</th><th>추세</th><th>총 접속</th>' +
+              '</tr></thead><tbody>' +
+              compareRows +
+              '</tbody></table></div>';
+
+        const html =
           '<div class="section-title">🎮 플레이어</div>' +
           '<div class="card"><h3>게임 등록</h3>' +
           '<div class="row"><input id="new-game-title" placeholder="게임 이름">' +
@@ -604,8 +1080,15 @@
           listHtml +
           '</div><div>' +
           detailHtml +
-          '</div></div>'
-        );
+          '</div></div>' +
+          analyticsHtml;
+
+        setTimeout(() => {
+          if (games.length) drawWeeklyChart('chart-compare-all', games, chartWeeks);
+          if (sel) drawTrendLine('chart-trend-sel', sel, chartWeeks);
+        }, 0);
+
+        return html;
       }
 
       /* ═══════════════════════════════════════════════════════════════
@@ -615,14 +1098,8 @@
         const stats = state.developerStats;
         const projects = state.devProjects;
         const sel = projects.find((p) => p.id === selectedProjectId);
-        const journals = [...state.devJournals].sort((a, b) =>
-          b.createdAt > a.createdAt ? 1 : -1
-        );
-        const ideas = [...state.ideaMemos].sort((a, b) => {
-          if (a.pinned && !b.pinned) return -1;
-          if (!a.pinned && b.pinned) return 1;
-          return b.updatedAt > a.updatedAt ? 1 : -1;
-        });
+        const statusDef = sel && PROJECT_STATUSES.find((s) => s.id === sel.status);
+        const showProgress = statusDef && statusDef.hasPercent;
 
         let projList = projects.length
           ? projects
@@ -637,7 +1114,7 @@
                   '</strong> <span class="badge badge-' +
                   p.status +
                   '">' +
-                  statusLabel(p.status) +
+                  statusDisplay(p) +
                   '</span></div>'
               )
               .join('')
@@ -645,7 +1122,50 @@
 
         let projDetail = '';
         if (sel) {
-          const tasks = sel.tasks;
+          const tasks = sel.tasks || [];
+          const ideas = [...(sel.ideas || [])].sort((a, b) => {
+            if (a.pinned && !b.pinned) return -1;
+            if (!a.pinned && b.pinned) return 1;
+            return b.updatedAt > a.updatedAt ? 1 : -1;
+          });
+
+          const ideaListHtml = ideas.length
+            ? ideas
+                .map(
+                  (m) =>
+                    '<div class="card" style="padding:0.75rem;margin-bottom:0.5rem">' +
+                    (m.pinned ? '📌 ' : '') +
+                    '<input class="idea-title-edit" data-iid="' +
+                    m.id +
+                    '" value="' +
+                    esc(m.title) +
+                    '" style="margin-bottom:0.35rem">' +
+                    '<textarea class="idea-body-edit" data-iid="' +
+                    m.id +
+                    '">' +
+                    esc(m.body) +
+                    '</textarea>' +
+                    '<button class="btn btn-sm btn-dev" data-action="save-proj-idea" data-pid="' +
+                    sel.id +
+                    '" data-iid="' +
+                    m.id +
+                    '">저장</button> ' +
+                    '<button class="btn btn-sm" data-action="toggle-proj-pin" data-pid="' +
+                    sel.id +
+                    '" data-iid="' +
+                    m.id +
+                    '">' +
+                    (m.pinned ? '고정 해제' : '고정') +
+                    '</button> ' +
+                    '<button class="btn btn-sm btn-danger" data-action="del-proj-idea" data-pid="' +
+                    sel.id +
+                    '" data-iid="' +
+                    m.id +
+                    '">삭제</button></div>'
+                )
+                .join('')
+            : '<p class="empty">아이디어 메모 없음</p>';
+
           projDetail =
             '<div class="card">' +
             '<h2>' +
@@ -656,18 +1176,17 @@
             esc(sel.name) +
             '">' +
             '<select id="proj-status">' +
-            ['planned', 'in_progress', 'completed']
-              .map(
-                (s) =>
-                  '<option value="' +
-                  s +
-                  '"' +
-                  (sel.status === s ? ' selected' : '') +
-                  '>' +
-                  statusLabel(s) +
-                  '</option>'
-              )
-              .join('') +
+            PROJECT_STATUSES.map(
+              (s) =>
+                '<option value="' +
+                s.id +
+                '"' +
+                (sel.status === s.id ? ' selected' : '') +
+                '>' +
+                s.label +
+                (s.hasPercent ? ' (진행률 %)' : '') +
+                '</option>'
+            ).join('') +
             '</select>' +
             '<button class="btn btn-sm btn-dev" data-action="save-project" data-id="' +
             sel.id +
@@ -675,9 +1194,16 @@
             '<button class="btn btn-sm btn-danger" data-action="delete-project" data-id="' +
             sel.id +
             '">삭제</button></div>' +
-            '<textarea id="proj-desc" placeholder="설명">' +
-            esc(sel.description || '') +
-            '</textarea>' +
+            (showProgress
+              ? '<div class="progress-block" id="proj-progress-wrap">' +
+                '<label>진행률 <span class="progress-val" id="proj-progress-val">' +
+                (sel.progressPercent ?? 0) +
+                '%</span></label>' +
+                '<input type="range" id="proj-progress" min="0" max="100" value="' +
+                (sel.progressPercent ?? 0) +
+                '" data-action="preview-progress">' +
+                '</div>'
+              : '<p class="muted progress-block">이 상태에서는 진행률을 쓰지 않습니다. 개발/테스트/마감 선택 시 % 설정 가능.</p>') +
             '<h3>작업 목록</h3>' +
             '<div class="row"><input id="new-task" placeholder="작업 추가">' +
             '<button class="btn btn-sm btn-dev" data-action="add-task" data-id="' +
@@ -688,17 +1214,23 @@
                 tasks
                   .map(
                     (t) =>
-                      '<li><label class="chk"><input type="checkbox" data-action="toggle-task" data-pid="' +
+                      '<li class="task-row"><label class="chk"><input type="checkbox" data-action="toggle-task" data-pid="' +
                       sel.id +
                       '" data-tid="' +
                       t.id +
                       '"' +
                       (t.done ? ' checked' : '') +
-                      '><span class="' +
-                      (t.done ? 'done-text' : '') +
-                      '">' +
+                      '></label>' +
+                      '<input class="task-title-input" id="task-title-' +
+                      t.id +
+                      '" value="' +
                       esc(t.title) +
-                      '</span></label>' +
+                      '">' +
+                      '<button class="btn btn-sm btn-dev" data-action="save-task" data-pid="' +
+                      sel.id +
+                      '" data-tid="' +
+                      t.id +
+                      '">저장</button>' +
                       '<button class="btn btn-sm btn-danger" data-action="del-task" data-pid="' +
                       sel.id +
                       '" data-tid="' +
@@ -708,74 +1240,30 @@
                   .join('') +
                 '</ul>'
               : '<p class="empty">작업 없음</p>') +
-            '</div>';
+            '<h3 style="margin-top:1rem">💡 프로젝트 아이디어</h3>' +
+            '<input id="proj-idea-title" placeholder="제목">' +
+            '<textarea id="proj-idea-body" placeholder="아이디어 내용..."></textarea>' +
+            '<button class="btn btn-sm btn-dev" data-action="add-proj-idea" data-id="' +
+            sel.id +
+            '">메모 추가</button>' +
+            '<div style="margin-top:0.65rem">' +
+            ideaListHtml +
+            '</div></div>';
         } else if (projects.length) {
           projDetail = '<p class="empty card">프로젝트를 선택하세요.</p>';
         }
 
-        const journalHtml =
-          journals.length === 0
-            ? '<p class="empty">일지 없음</p>'
-            : journals
-                .map((j) => {
-                  const proj = j.projectId
-                    ? state.devProjects.find((p) => p.id === j.projectId)
-                    : null;
-                  return (
-                    '<div class="card" style="padding:0.75rem">' +
-                    '<strong>' +
-                    esc(j.title) +
-                    '</strong>' +
-                    (proj ? ' <span class="muted">· ' + esc(proj.name) + '</span>' : '') +
-                    '<p class="muted">' +
-                    fmtDate(j.createdAt) +
-                    '</p><p style="font-size:0.88rem;margin:0.35rem 0">' +
-                    esc(j.body) +
-                    '</p>' +
-                    '<button class="btn btn-sm btn-danger" data-action="del-journal" data-id="' +
-                    j.id +
-                    '">삭제</button></div>'
-                  );
-                })
-                .join('');
-
-        const ideaHtml =
-          ideas.length === 0
-            ? '<p class="empty">메모 없음</p>'
-            : ideas
-                .map(
-                  (m) =>
-                    '<div class="card" style="padding:0.75rem">' +
-                    (m.pinned ? '📌 ' : '') +
-                    '<strong>' +
-                    esc(m.title) +
-                    '</strong><p style="font-size:0.88rem;margin:0.35rem 0">' +
-                    esc(m.body) +
-                    '</p>' +
-                    '<button class="btn btn-sm" data-action="toggle-pin" data-id="' +
-                    m.id +
-                    '">' +
-                    (m.pinned ? '고정 해제' : '고정') +
-                    '</button> ' +
-                    '<button class="btn btn-sm btn-danger" data-action="del-idea" data-id="' +
-                    m.id +
-                    '">삭제</button></div>'
-                )
-                .join('');
-
-        const events = (stats.recentXpEvents || []).slice(0, 5);
+        const xpEvents = (stats.recentXpEvents || []).slice(0, 5);
         const eventsHtml =
-          events.length === 0
+          xpEvents.length === 0
             ? '<p class="empty">XP 기록 없음</p>'
             : '<ul class="list">' +
-              events
+              xpEvents
                 .map(
                   (e) =>
                     '<li>+' +
                     e.amount +
-                    ' XP · ' +
-                    (e.source === 'task_complete' ? '작업 완료' : '일지 작성') +
-                    ' · ' +
+                    ' XP · 작업 완료 · ' +
                     fmtDate(e.at) +
                     '</li>'
                 )
@@ -790,8 +1278,6 @@
           stats.totalXp +
           ' XP · 작업 완료 +' +
           XP_REWARDS.task_complete +
-          ' · 일지 +' +
-          XP_REWARDS.journal_write +
           '</p><h3 style="margin-top:0.65rem">최근 XP</h3>' +
           eventsHtml +
           '</div>' +
@@ -802,24 +1288,6 @@
           projList +
           '</div><div>' +
           projDetail +
-          '</div></div>' +
-          '<div class="card"><h3>📓 개발 일지 작성 (+10 XP)</h3>' +
-          '<input id="journal-title" placeholder="제목">' +
-          '<select id="journal-project"><option value="">프로젝트 (선택)</option>' +
-          projects
-            .map((p) => '<option value="' + p.id + '">' + esc(p.name) + '</option>')
-            .join('') +
-          '</select><textarea id="journal-body" placeholder="오늘 한 일..."></textarea>' +
-          '<button class="btn btn-dev" data-action="add-journal">일지 저장</button></div>' +
-          '<div class="card"><h3>일지 목록</h3>' +
-          journalHtml +
-          '</div>' +
-          '<div class="card"><h3>💡 아이디어 메모</h3>' +
-          '<input id="idea-title" placeholder="제목">' +
-          '<textarea id="idea-body" placeholder="아이디어..."></textarea>' +
-          '<button class="btn btn-dev" data-action="add-idea">메모 추가</button>' +
-          '<div style="margin-top:0.75rem">' +
-          ideaHtml +
           '</div></div>'
         );
       }
@@ -847,6 +1315,8 @@
             memo: '',
             checklist: [],
             accessLogs: [],
+            events: [],
+            weeklyGoal: 3,
           };
           state.games.push(g);
           selectedGameId = g.id;
@@ -925,14 +1395,53 @@
           g.updatedAt = nowIso();
           persist();
         },
+        'save-weekly-goal'(el) {
+          const g = state.games.find((x) => x.id === el.dataset.id);
+          if (!g) return;
+          const n = parseInt(document.getElementById('weekly-goal').value, 10);
+          g.weeklyGoal = isNaN(n) || n < 1 ? 3 : Math.min(30, n);
+          g.updatedAt = nowIso();
+          persist();
+        },
+        'add-event'(el) {
+          const g = state.games.find((x) => x.id === el.dataset.id);
+          const title = document.getElementById('event-title').value.trim();
+          const startDate = document.getElementById('event-start').value;
+          if (!g || !title || !startDate) return alert('이벤트명과 시작일을 입력하세요.');
+          if (!g.events) g.events = [];
+          g.events.unshift({
+            id: uid(),
+            title,
+            startDate,
+            endDate: document.getElementById('event-end').value || undefined,
+            note: document.getElementById('event-note').value.trim() || undefined,
+            createdAt: nowIso(),
+          });
+          g.updatedAt = nowIso();
+          document.getElementById('event-title').value = '';
+          document.getElementById('event-note').value = '';
+          persist();
+        },
+        'del-event'(el) {
+          const g = state.games.find((x) => x.id === el.dataset.gid);
+          if (!g || !g.events) return;
+          g.events = g.events.filter((e) => e.id !== el.dataset.eid);
+          g.updatedAt = nowIso();
+          persist();
+        },
+        'set-chart-weeks'(el) {
+          chartWeeks = parseInt(el.dataset.weeks, 10) || 8;
+          render();
+        },
         'add-project'() {
           const name = document.getElementById('new-proj-name').value.trim();
           if (!name) return alert('프로젝트명을 입력하세요.');
           const p = {
             ...baseEntity(),
             name,
-            status: 'planned',
+            status: 'backlog',
             tasks: [],
+            ideas: [],
           };
           state.devProjects.push(p);
           selectedProjectId = p.id;
@@ -947,9 +1456,21 @@
           if (!p) return;
           p.name = document.getElementById('proj-name').value.trim() || p.name;
           p.status = document.getElementById('proj-status').value;
-          p.description = document.getElementById('proj-desc').value.trim() || undefined;
+          const def = PROJECT_STATUSES.find((s) => s.id === p.status);
+          if (def && def.hasPercent) {
+            const prog = document.getElementById('proj-progress');
+            p.progressPercent = prog
+              ? Math.min(100, Math.max(0, parseInt(prog.value, 10) || 0))
+              : p.progressPercent ?? 0;
+          } else {
+            delete p.progressPercent;
+          }
           p.updatedAt = nowIso();
           persist();
+        },
+        'preview-progress'(el) {
+          const val = document.getElementById('proj-progress-val');
+          if (val) val.textContent = el.value + '%';
         },
         'delete-project'(el) {
           if (!confirm('프로젝트를 삭제할까요?')) return;
@@ -978,6 +1499,19 @@
           p.updatedAt = nowIso();
           persist();
         },
+        'save-task'(el) {
+          const p = state.devProjects.find((x) => x.id === el.dataset.pid);
+          const t = p && p.tasks.find((x) => x.id === el.dataset.tid);
+          if (!t) return;
+          const inp = document.getElementById('task-title-' + t.id);
+          const title = (inp && inp.value.trim()) || t.title;
+          if (!title) return alert('작업 제목을 입력하세요.');
+          t.title = title;
+          t.updatedAt = nowIso();
+          p.updatedAt = nowIso();
+          showToast('작업 수정됨');
+          persist();
+        },
         'del-task'(el) {
           const p = state.devProjects.find((x) => x.id === el.dataset.pid);
           if (!p) return;
@@ -985,51 +1519,50 @@
           p.updatedAt = nowIso();
           persist();
         },
-        'add-journal'() {
-          const title = document.getElementById('journal-title').value.trim();
-          const body = document.getElementById('journal-body').value.trim();
-          if (!title || !body) return alert('제목과 내용을 입력하세요.');
-          const pid = document.getElementById('journal-project').value || undefined;
-          const j = {
-            ...baseEntity(),
-            projectId: pid,
-            title,
-            body,
-            xpAwarded: true,
-          };
-          state.devJournals.unshift(j);
-          addXp(XP_REWARDS.journal_write, 'journal_write', j.id);
-          document.getElementById('journal-title').value = '';
-          document.getElementById('journal-body').value = '';
-          persist();
-        },
-        'del-journal'(el) {
-          state.devJournals = state.devJournals.filter((j) => j.id !== el.dataset.id);
-          persist();
-        },
-        'add-idea'() {
-          const title = document.getElementById('idea-title').value.trim();
-          const body = document.getElementById('idea-body').value.trim();
-          if (!title) return alert('제목을 입력하세요.');
-          state.ideaMemos.unshift({
+        'add-proj-idea'(el) {
+          const p = state.devProjects.find((x) => x.id === el.dataset.id);
+          const title = document.getElementById('proj-idea-title').value.trim();
+          const body = document.getElementById('proj-idea-body').value.trim();
+          if (!p || !title) return alert('제목을 입력하세요.');
+          if (!p.ideas) p.ideas = [];
+          p.ideas.unshift({
             ...baseEntity(),
             title,
             body: body || '',
             pinned: false,
           });
-          document.getElementById('idea-title').value = '';
-          document.getElementById('idea-body').value = '';
+          p.updatedAt = nowIso();
+          document.getElementById('proj-idea-title').value = '';
+          document.getElementById('proj-idea-body').value = '';
           persist();
         },
-        'toggle-pin'(el) {
-          const m = state.ideaMemos.find((x) => x.id === el.dataset.id);
+        'save-proj-idea'(el) {
+          const p = state.devProjects.find((x) => x.id === el.dataset.pid);
+          const m = p && p.ideas && p.ideas.find((x) => x.id === el.dataset.iid);
+          if (!m) return;
+          const titleEl = document.querySelector('.idea-title-edit[data-iid="' + m.id + '"]');
+          const bodyEl = document.querySelector('.idea-body-edit[data-iid="' + m.id + '"]');
+          m.title = (titleEl && titleEl.value.trim()) || m.title;
+          m.body = bodyEl ? bodyEl.value : m.body;
+          m.updatedAt = nowIso();
+          p.updatedAt = nowIso();
+          showToast('메모 저장됨');
+          persist();
+        },
+        'toggle-proj-pin'(el) {
+          const p = state.devProjects.find((x) => x.id === el.dataset.pid);
+          const m = p && p.ideas && p.ideas.find((x) => x.id === el.dataset.iid);
           if (!m) return;
           m.pinned = !m.pinned;
           m.updatedAt = nowIso();
+          p.updatedAt = nowIso();
           persist();
         },
-        'del-idea'(el) {
-          state.ideaMemos = state.ideaMemos.filter((m) => m.id !== el.dataset.id);
+        'del-proj-idea'(el) {
+          const p = state.devProjects.find((x) => x.id === el.dataset.pid);
+          if (!p || !p.ideas) return;
+          p.ideas = p.ideas.filter((m) => m.id !== el.dataset.iid);
+          p.updatedAt = nowIso();
           persist();
         },
       };
@@ -1045,6 +1578,12 @@
         if (e.target.dataset.action) {
           const fn = actions[e.target.dataset.action];
           if (fn) fn(e.target);
+        }
+      });
+
+      document.body.addEventListener('input', (e) => {
+        if (e.target.dataset.action === 'preview-progress') {
+          actions['preview-progress'](e.target);
         }
       });
 
