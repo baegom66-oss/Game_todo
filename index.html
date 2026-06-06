@@ -296,7 +296,17 @@
           return {
             ...copy,
             events: copy.events || [],
-            accessLogs: copy.accessLogs || [],
+            accessLogs: (copy.accessLogs || []).map((log) => {
+              const playedDate =
+                log.playedDate ||
+                (log.playedAt && log.playedAt.slice(0, 10)) ||
+                todayStr();
+              return {
+                id: log.id || uid(),
+                playedDate,
+                memo: log.memo,
+              };
+            }),
             checklist: copy.checklist || [],
             memo: copy.memo || '',
           };
@@ -461,6 +471,33 @@
         return new Date().toISOString().slice(0, 10);
       }
 
+      function fmtDateOnly(dateStr) {
+        if (!dateStr) return '';
+        const d = parseDateStr(dateStr);
+        return d.toLocaleDateString('ko-KR', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+        });
+      }
+
+      function parseDateStr(s) {
+        if (!s) return new Date();
+        if (s.length >= 10 && s[4] === '-') {
+          const [y, m, d] = s.slice(0, 10).split('-').map(Number);
+          return new Date(y, m - 1, d);
+        }
+        return new Date(s);
+      }
+
+      /** 접속 기록 날짜 (YYYY-MM-DD) */
+      function accessLogDate(log) {
+        if (!log) return '';
+        if (log.playedDate) return log.playedDate;
+        if (log.playedAt) return log.playedAt.slice(0, 10);
+        return '';
+      }
+
       function fmtDate(iso) {
         if (!iso) return '';
         const d = new Date(iso);
@@ -494,11 +531,11 @@
       function countAccessThisWeek(game) {
         const labels = getWeekLabels(1);
         const wk = labels[0];
-        return (game.accessLogs || []).filter((l) => weekKey(l.playedAt) === wk).length;
+        return (game.accessLogs || []).filter((l) => weekKey(accessLogDate(l)) === wk).length;
       }
 
       function weekKey(d) {
-        const x = new Date(d);
+        const x = parseDateStr(typeof d === 'string' && d.length === 10 ? d : d);
         const day = x.getDay();
         const diff = x.getDate() - day + (day === 0 ? -6 : 1);
         const mon = new Date(x.setDate(diff));
@@ -520,7 +557,7 @@
         const labels = getWeekLabels(weeks);
         const counts = labels.map(() => 0);
         (game.accessLogs || []).forEach((log) => {
-          const wk = weekKey(log.playedAt);
+          const wk = weekKey(accessLogDate(log));
           const idx = labels.indexOf(wk);
           if (idx >= 0) counts[idx]++;
         });
@@ -529,13 +566,14 @@
 
       function avgDaysBetweenAccess(game) {
         const logs = [...(game.accessLogs || [])].sort((a, b) =>
-          a.playedAt > b.playedAt ? 1 : -1
+          accessLogDate(b).localeCompare(accessLogDate(a))
         );
         if (logs.length < 2) return null;
         let sum = 0;
         for (let i = 1; i < logs.length; i++) {
           sum +=
-            (new Date(logs[i].playedAt) - new Date(logs[i - 1].playedAt)) / 86400000;
+            (parseDateStr(accessLogDate(logs[i])) - parseDateStr(accessLogDate(logs[i - 1]))) /
+            86400000;
         }
         return (sum / (logs.length - 1)).toFixed(1);
       }
@@ -700,7 +738,7 @@
         state.games.forEach((g) => {
           g.accessLogs.forEach((log) => recentLogs.push({ game: g.title, log, gameId: g.id }));
         });
-        recentLogs.sort((a, b) => (b.log.playedAt > a.log.playedAt ? 1 : -1));
+        recentLogs.sort((a, b) => accessLogDate(b.log).localeCompare(accessLogDate(a.log)));
         const recent5 = recentLogs.slice(0, 5);
 
         const activeProjects = state.devProjects.filter(isActiveProject);
@@ -771,7 +809,7 @@
                     '<li><span><strong>' +
                     esc(r.game) +
                     '</strong> · ' +
-                    fmtDate(r.log.playedAt) +
+                    fmtDateOnly(accessLogDate(r.log)) +
                     (r.log.memo ? ' — ' + esc(r.log.memo) : '') +
                     '</span></li>'
                 )
@@ -857,7 +895,7 @@
           const today = todayStr();
           const todayItems = sel.checklist.filter((c) => c.date === today);
           const logs = [...(sel.accessLogs || [])].sort((a, b) =>
-            b.playedAt > a.playedAt ? 1 : -1
+            accessLogDate(b).localeCompare(accessLogDate(a))
           );
           const events = [...(sel.events || [])].sort((a, b) =>
             (b.startDate || '') > (a.startDate || '') ? 1 : -1
@@ -967,17 +1005,21 @@
             sel.id +
             '">메모 저장</button>' +
             '<h3 style="margin-top:0.75rem">🕹️ 접속 기록</h3>' +
-            '<div class="row"><input id="access-memo" placeholder="메모 (선택)">' +
+            '<div class="row">' +
+            '<input type="date" id="access-date" value="' +
+            today +
+            '" style="max-width:160px">' +
+            '<input id="access-memo" placeholder="메모 (선택)">' +
             '<button class="btn btn-sm btn-player" data-action="add-access" data-id="' +
             sel.id +
-            '">접속 기록</button></div>' +
+            '">추가</button></div>' +
             (logs.length
               ? '<ul class="list">' +
                 logs
                   .map(
                     (l) =>
                       '<li>' +
-                      fmtDate(l.playedAt) +
+                      fmtDateOnly(accessLogDate(l)) +
                       (l.memo ? ' — ' + esc(l.memo) : '') +
                       '<button class="btn btn-sm btn-danger" style="margin-left:auto" data-action="del-access" data-gid="' +
                       sel.id +
@@ -1004,10 +1046,10 @@
           compareRows = games
             .map((g) => {
               const thisWeekCount = (g.accessLogs || []).filter(
-                (l) => weekKey(l.playedAt) === thisWk
+                (l) => weekKey(accessLogDate(l)) === thisWk
               ).length;
               const prevWeekCount = (g.accessLogs || []).filter(
-                (l) => weekKey(l.playedAt) === weekLabels[weekLabels.length - 2]
+                (l) => weekKey(accessLogDate(l)) === weekLabels[weekLabels.length - 2]
               ).length;
               const trend =
                 thisWeekCount > prevWeekCount
@@ -1394,9 +1436,11 @@
         'add-access'(el) {
           const g = state.games.find((x) => x.id === el.dataset.id);
           if (!g) return;
+          const playedDate = document.getElementById('access-date').value;
+          if (!playedDate) return alert('접속 날짜를 선택하세요.');
           g.accessLogs.unshift({
             id: uid(),
-            playedAt: nowIso(),
+            playedDate,
             memo: document.getElementById('access-memo').value.trim() || undefined,
           });
           g.updatedAt = nowIso();
