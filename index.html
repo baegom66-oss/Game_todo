@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Game Life Manager</title>
+    <title>Game Dev Todo</title>
     <style>
       :root {
         --bg: #0f1419;
@@ -65,6 +65,8 @@
         color: var(--text);
       }
       nav button[data-view='developer'].active { color: var(--dev); }
+      nav button[data-view='brainstorm'].active { color: var(--accent2); }
+      nav button[data-view='memos'].active { color: var(--accent); }
       .card {
         background: var(--surface);
         border: 1px solid var(--border);
@@ -142,27 +144,7 @@
       }
       .badge-planned { color: #93c5fd; }
       .badge-in_progress { color: var(--dev); }
-      .badge-completed { color: var(--player); }
-      .xp-bar-wrap { margin-top: 0.5rem; }
-      .xp-bar-label {
-        display: flex;
-        justify-content: space-between;
-        font-size: 0.82rem;
-        margin-bottom: 0.35rem;
-      }
-      .xp-bar {
-        height: 12px;
-        background: var(--bg);
-        border-radius: 6px;
-        overflow: hidden;
-        border: 1px solid var(--border);
-      }
-      .xp-bar-fill {
-        height: 100%;
-        background: linear-gradient(90deg, var(--dev), var(--accent2));
-        border-radius: 6px;
-        transition: width 0.3s;
-      }
+      .badge-completed { color: #34d399; }
       .toast {
         position: fixed;
         bottom: 1.25rem;
@@ -198,19 +180,40 @@
       .badge-development { color: var(--dev); }
       .badge-testing { color: #fb923c; }
       .badge-closing { color: #f472b6; }
-      .badge-completed { color: var(--player); }
+      .badge-completed { color: #34d399; }
       .badge-stopped { color: var(--muted); }
       .progress-block { margin: 0.5rem 0 0.75rem; }
       .progress-block input[type='range'] { width: 100%; margin: 0.35rem 0; }
       .progress-block .progress-val { font-size: 0.85rem; color: var(--dev); font-weight: 600; }
       .task-row { flex-wrap: wrap; align-items: center !important; }
       .task-row input.task-title-input { flex: 1; min-width: 140px; margin-bottom: 0; }
+      .brainstorm-canvas { min-height: 280px; font-size: 0.92rem; line-height: 1.6; }
+      .memo-all-item {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0.75rem;
+        margin-bottom: 0.65rem;
+      }
+      .memo-all-item .proj-tag {
+        font-size: 0.78rem;
+        color: var(--dev);
+        margin-bottom: 0.35rem;
+      }
+      .memo-preview {
+        font-size: 0.85rem;
+        color: var(--muted);
+        padding: 0.4rem 0;
+        border-bottom: 1px dashed var(--border);
+        margin-bottom: 0.5rem;
+      }
+      .memo-preview:last-child { border-bottom: none; }
     </style>
   </head>
   <body>
     <div class="app">
       <header>
-        <h1>🎮 <span>Game Life</span> Manager</h1>
+        <h1>🎮 <span>Game Dev</span> Todo</h1>
         <nav id="nav"></nav>
       </header>
       <main id="main"></main>
@@ -235,9 +238,9 @@
 
       function createInitialAppData() {
         return {
-          version: 3,
+          version: 4,
           devProjects: [],
-          developerStats: { totalXp: 0, level: 1, recentXpEvents: [] },
+          brainstorm: { canvas: '', notes: [] },
         };
       }
 
@@ -245,6 +248,7 @@
         if (!parsed || typeof parsed !== 'object') return createInitialAppData();
 
         delete parsed.games;
+        delete parsed.developerStats;
 
         const statusMap = {
           planned: 'scheduled',
@@ -312,51 +316,11 @@
 
         delete parsed.devJournals;
         delete parsed.ideaMemos;
-        parsed.version = 3;
-        parsed.developerStats = parsed.developerStats || {
-          totalXp: 0,
-          level: 1,
-          recentXpEvents: [],
-        };
+        parsed.version = 4;
+        parsed.brainstorm = parsed.brainstorm || { canvas: '', notes: [] };
+        if (typeof parsed.brainstorm.canvas !== 'string') parsed.brainstorm.canvas = '';
+        if (!Array.isArray(parsed.brainstorm.notes)) parsed.brainstorm.notes = [];
         return parsed;
-      }
-
-      /* ═══════════════════════════════════════════════════════════════
-         RPG (src/types/rpg.ts)
-      ═══════════════════════════════════════════════════════════════ */
-      const XP_REWARDS = { task_complete: 5 };
-      const LEVEL_THRESHOLDS = [0, 100, 250, 450, 700, 1000, 1350, 1750, 2200, 2700];
-
-      function thresholdForLevel(level) {
-        if (level <= 1) return 0;
-        if (level - 1 < LEVEL_THRESHOLDS.length) return LEVEL_THRESHOLDS[level - 1];
-        const lastDefined = LEVEL_THRESHOLDS.length;
-        let lastXp = LEVEL_THRESHOLDS[lastDefined - 1];
-        let prevXp = LEVEL_THRESHOLDS[lastDefined - 2];
-        let gap = lastXp - prevXp;
-        let xp = lastXp;
-        for (let lv = lastDefined + 1; lv <= level; lv++) {
-          gap += 50;
-          xp += gap;
-        }
-        return xp;
-      }
-
-      function levelFromTotalXp(totalXp) {
-        let level = 1;
-        while (thresholdForLevel(level + 1) <= totalXp) level++;
-        return level;
-      }
-
-      function xpProgressInLevel(totalXp) {
-        const level = levelFromTotalXp(totalXp);
-        const floor = thresholdForLevel(level);
-        const ceiling = thresholdForLevel(level + 1);
-        const currentInLevel = totalXp - floor;
-        const neededForLevel = ceiling - floor;
-        const percent =
-          neededForLevel <= 0 ? 100 : Math.min(100, (currentInLevel / neededForLevel) * 100);
-        return { level, currentInLevel, neededForLevel, percent };
       }
 
       /* ═══════════════════════════════════════════════════════════════
@@ -365,6 +329,7 @@
       let state = loadAppData();
       let currentView = 'home';
       let selectedProjectId = null;
+      let memoFilterProjectId = null;
 
       function loadAppData() {
         try {
@@ -379,7 +344,6 @@
       }
 
       function saveAppData() {
-        state.developerStats.level = levelFromTotalXp(state.developerStats.totalXp);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         render();
       }
@@ -441,39 +405,75 @@
         showToast._t = setTimeout(() => el.classList.remove('show'), 2200);
       }
 
-      function addXp(amount, source, referenceId) {
-        const stats = state.developerStats;
-        const prevLevel = levelFromTotalXp(stats.totalXp);
-        stats.totalXp += amount;
-        const newLevel = levelFromTotalXp(stats.totalXp);
-        stats.level = newLevel;
-        if (!stats.recentXpEvents) stats.recentXpEvents = [];
-        stats.recentXpEvents.unshift({
-          id: uid(),
-          at: nowIso(),
-          amount,
-          source,
-          referenceId,
+      function getAllMemos() {
+        const memos = [];
+        state.devProjects.forEach((p) => {
+          (p.ideas || []).forEach((m) => {
+            memos.push({
+              ...m,
+              projectId: p.id,
+              projectName: p.name,
+            });
+          });
         });
-        stats.recentXpEvents = stats.recentXpEvents.slice(0, 20);
-        if (newLevel > prevLevel) showToast('🎉 레벨 업! Lv.' + newLevel);
-        else showToast('+' + amount + ' XP');
+        return memos.sort((a, b) => {
+          if (a.pinned && !b.pinned) return -1;
+          if (!a.pinned && b.pinned) return 1;
+          const da = a.memoDate || '';
+          const db = b.memoDate || '';
+          if (db !== da) return db > da ? 1 : -1;
+          return b.updatedAt > a.updatedAt ? 1 : -1;
+        });
       }
 
-      function xpBarHtml(totalXp) {
-        const p = xpProgressInLevel(totalXp);
+      function sortIdeas(ideas) {
+        return [...ideas].sort((a, b) => {
+          if (a.pinned && !b.pinned) return -1;
+          if (!a.pinned && b.pinned) return 1;
+          const da = a.memoDate || '';
+          const db = b.memoDate || '';
+          if (db !== da) return db > da ? 1 : -1;
+          return b.updatedAt > a.updatedAt ? 1 : -1;
+        });
+      }
+
+      function memoEditHtml(m, pid, prefix) {
+        const p = prefix || '';
         return (
-          '<div class="xp-bar-wrap">' +
-          '<div class="xp-bar-label"><span>Lv.' +
-          p.level +
-          '</span><span>' +
-          p.currentInLevel +
-          ' / ' +
-          p.neededForLevel +
-          ' XP</span></div>' +
-          '<div class="xp-bar"><div class="xp-bar-fill" style="width:' +
-          p.percent +
-          '%"></div></div></div>'
+          (m.pinned ? '📌 ' : '') +
+          '<div class="row" style="margin-bottom:0.35rem">' +
+          '<label class="muted" style="font-size:0.82rem">날짜</label>' +
+          '<input type="date" class="idea-date-edit" data-prefix="' +
+          p +
+          '" data-iid="' +
+          m.id +
+          '" value="' +
+          esc(m.memoDate || todayStr()) +
+          '" style="max-width:160px;margin-bottom:0"></div>' +
+          '<textarea class="idea-body-edit" data-prefix="' +
+          p +
+          '" data-iid="' +
+          m.id +
+          '" placeholder="메모 내용">' +
+          esc(m.body) +
+          '</textarea>' +
+          '<button class="btn btn-sm btn-dev" data-action="save-proj-idea" data-pid="' +
+          pid +
+          '" data-iid="' +
+          m.id +
+          '">저장</button> ' +
+          '<button class="btn btn-sm" data-action="toggle-proj-pin" data-pid="' +
+          pid +
+          '" data-iid="' +
+          m.id +
+          '">' +
+          (m.pinned ? '고정 해제' : '고정') +
+          '</button> ' +
+          '<button class="btn btn-sm btn-danger" data-action="del-proj-idea" data-pid="' +
+          pid +
+          '" data-iid="' +
+          m.id +
+          '">삭제</button>'
         );
       }
 
@@ -495,7 +495,7 @@
           (n, p) => n + p.tasks.filter((t) => !t.done).length,
           0
         );
-        const stats = state.developerStats;
+        const totalMemos = getAllMemos().length;
 
         let projHtml =
           activeProjects.length === 0
@@ -519,16 +519,18 @@
 
         return (
           '<div class="section-title">🏠 홈 대시보드</div>' +
-          '<div class="card"><h2>🛠️ 개발자 요약</h2>' +
+          '<div class="card"><h2>📋 개발 현황</h2>' +
           '<h3>진행 중 프로젝트</h3>' +
           projHtml +
           '<p class="muted" style="margin:0.5rem 0">미완료 작업: <strong>' +
           openTasks +
+          '</strong>개 · 프로젝트 메모: <strong>' +
+          totalMemos +
           '</strong>개</p>' +
-          xpBarHtml(stats.totalXp) +
-          '<p class="muted" style="margin-top:0.5rem">누적 XP: ' +
-          stats.totalXp +
-          '</p></div>'
+          '<div class="row" style="margin-top:0.5rem">' +
+          '<button class="btn btn-sm btn-dev" data-action="nav-view" data-view="developer">프로젝트 관리</button> ' +
+          '<button class="btn btn-sm" data-action="nav-view" data-view="brainstorm">브레인스톰</button> ' +
+          '<button class="btn btn-sm" data-action="nav-view" data-view="memos">메모 전체보기</button></div></div>'
         );
       }
 
@@ -536,7 +538,6 @@
          개발자 페이지
       ═══════════════════════════════════════════════════════════════ */
       function renderDeveloper() {
-        const stats = state.developerStats;
         const projects = state.devProjects;
         const sel = projects.find((p) => p.id === selectedProjectId);
         const statusDef = sel && PROJECT_STATUSES.find((s) => s.id === sel.status);
@@ -564,53 +565,23 @@
         let projDetail = '';
         if (sel) {
           const tasks = sel.tasks || [];
-          const ideas = [...(sel.ideas || [])].sort((a, b) => {
-            if (a.pinned && !b.pinned) return -1;
-            if (!a.pinned && b.pinned) return 1;
-            const da = a.memoDate || '';
-            const db = b.memoDate || '';
-            if (db !== da) return db > da ? 1 : -1;
-            return b.updatedAt > a.updatedAt ? 1 : -1;
-          });
+          const ideas = sortIdeas(sel.ideas || []);
+          const previewIdeas = ideas.slice(0, 3);
 
-          const ideaListHtml = ideas.length
-            ? ideas
+          const ideaPreviewHtml = previewIdeas.length
+            ? previewIdeas
                 .map(
                   (m) =>
-                    '<div class="card" style="padding:0.75rem;margin-bottom:0.5rem">' +
+                    '<div class="memo-preview">' +
                     (m.pinned ? '📌 ' : '') +
-                    '<div class="row" style="margin-bottom:0.35rem">' +
-                    '<label class="muted" style="font-size:0.82rem">날짜</label>' +
-                    '<input type="date" class="idea-date-edit" data-iid="' +
-                    m.id +
-                    '" value="' +
-                    esc(m.memoDate || todayStr()) +
-                    '" style="max-width:160px;margin-bottom:0"></div>' +
-                    '<textarea class="idea-body-edit" data-iid="' +
-                    m.id +
-                    '" placeholder="아이디어 내용">' +
-                    esc(m.body) +
-                    '</textarea>' +
-                    '<button class="btn btn-sm btn-dev" data-action="save-proj-idea" data-pid="' +
-                    sel.id +
-                    '" data-iid="' +
-                    m.id +
-                    '">저장</button> ' +
-                    '<button class="btn btn-sm" data-action="toggle-proj-pin" data-pid="' +
-                    sel.id +
-                    '" data-iid="' +
-                    m.id +
-                    '">' +
-                    (m.pinned ? '고정 해제' : '고정') +
-                    '</button> ' +
-                    '<button class="btn btn-sm btn-danger" data-action="del-proj-idea" data-pid="' +
-                    sel.id +
-                    '" data-iid="' +
-                    m.id +
-                    '">삭제</button></div>'
+                    '<span class="muted">' +
+                    esc(m.memoDate || '') +
+                    '</span> · ' +
+                    esc(m.body.length > 60 ? m.body.slice(0, 60) + '…' : m.body) +
+                    '</div>'
                 )
                 .join('')
-            : '<p class="empty">아이디어 메모 없음</p>';
+            : '<p class="empty">메모 없음</p>';
 
           projDetail =
             '<div class="card">' +
@@ -686,50 +657,29 @@
                   .join('') +
                 '</ul>'
               : '<p class="empty">작업 없음</p>') +
-            '<h3 style="margin-top:1rem">💡 프로젝트 아이디어</h3>' +
+            '<h3 style="margin-top:1rem">💡 프로젝트 메모</h3>' +
             '<div class="row"><label class="muted" style="font-size:0.85rem">기록 날짜</label>' +
             '<input type="date" id="proj-idea-date" value="' +
             todayStr() +
             '" style="max-width:160px;margin-bottom:0"></div>' +
-            '<textarea id="proj-idea-body" placeholder="아이디어 내용..."></textarea>' +
+            '<textarea id="proj-idea-body" placeholder="메모 내용..."></textarea>' +
             '<button class="btn btn-sm btn-dev" data-action="add-proj-idea" data-id="' +
             sel.id +
             '">메모 추가</button>' +
             '<div style="margin-top:0.65rem">' +
-            ideaListHtml +
-            '</div></div>';
+            ideaPreviewHtml +
+            (ideas.length > 3
+              ? '<p class="muted">외 ' + (ideas.length - 3) + '개 메모</p>'
+              : '') +
+            '<button class="btn btn-sm" style="margin-top:0.35rem" data-action="nav-view" data-view="memos">📝 메모 전체보기 (' +
+            ideas.length +
+            ')</button></div></div>';
         } else if (projects.length) {
           projDetail = '<p class="empty card">프로젝트를 선택하세요.</p>';
         }
 
-        const xpEvents = (stats.recentXpEvents || []).slice(0, 5);
-        const eventsHtml =
-          xpEvents.length === 0
-            ? '<p class="empty">XP 기록 없음</p>'
-            : '<ul class="list">' +
-              xpEvents
-                .map(
-                  (e) =>
-                    '<li>+' +
-                    e.amount +
-                    ' XP · 작업 완료 · ' +
-                    fmtDate(e.at) +
-                    '</li>'
-                )
-                .join('') +
-              '</ul>';
-
         return (
-          '<div class="section-title">🛠️ 개발자</div>' +
-          '<div class="card"><h2>RPG 스탯</h2>' +
-          xpBarHtml(stats.totalXp) +
-          '<p class="muted">누적 ' +
-          stats.totalXp +
-          ' XP · 작업 완료 +' +
-          XP_REWARDS.task_complete +
-          '</p><h3 style="margin-top:0.65rem">최근 XP</h3>' +
-          eventsHtml +
-          '</div>' +
+          '<div class="section-title">🛠️ 프로젝트</div>' +
           '<div class="card"><h3>프로젝트 등록</h3>' +
           '<div class="row"><input id="new-proj-name" placeholder="프로젝트명">' +
           '<button class="btn btn-dev" data-action="add-project">등록</button></div></div>' +
@@ -738,6 +688,104 @@
           '</div><div>' +
           projDetail +
           '</div></div>'
+        );
+      }
+
+      function renderBrainstorm() {
+        const bs = state.brainstorm || { canvas: '', notes: [] };
+        const notes = [...(bs.notes || [])].sort((a, b) =>
+          b.updatedAt > a.updatedAt ? 1 : -1
+        );
+
+        const notesHtml = notes.length
+          ? notes
+              .map(
+                (n) =>
+                  '<div class="card" style="padding:0.75rem;margin-bottom:0.5rem">' +
+                  '<textarea class="bs-note-edit" data-nid="' +
+                  n.id +
+                  '" style="min-height:64px">' +
+                  esc(n.body) +
+                  '</textarea>' +
+                  '<p class="muted" style="font-size:0.75rem;margin:0.25rem 0">' +
+                  fmtDate(n.updatedAt) +
+                  '</p>' +
+                  '<button class="btn btn-sm btn-dev" data-action="save-bs-note" data-nid="' +
+                  n.id +
+                  '">저장</button> ' +
+                  '<button class="btn btn-sm btn-danger" data-action="del-bs-note" data-nid="' +
+                  n.id +
+                  '">삭제</button></div>'
+              )
+              .join('')
+          : '<p class="empty">아직 스티키 메모가 없습니다.</p>';
+
+        return (
+          '<div class="section-title">💡 브레인스톰</div>' +
+          '<div class="card"><h2>자유 메모 캔버스</h2>' +
+          '<p class="muted" style="margin-bottom:0.5rem">프로젝트에 묶이지 않고 자유롭게 아이디어를 적어 보세요. 입력 시 자동 저장됩니다.</p>' +
+          '<textarea id="brainstorm-canvas" class="brainstorm-canvas" placeholder="게임 아이디어, 시스템 구상, 떠오르는 생각…">' +
+          esc(bs.canvas || '') +
+          '</textarea></div>' +
+          '<div class="card"><h3>스티키 메모</h3>' +
+          '<textarea id="new-bs-note" placeholder="짧은 아이디어 한 줄…" style="min-height:56px"></textarea>' +
+          '<button class="btn btn-dev" data-action="add-bs-note">메모 추가</button>' +
+          '<div style="margin-top:0.75rem">' +
+          notesHtml +
+          '</div></div>'
+        );
+      }
+
+      function renderMemosAll() {
+        const memos = getAllMemos();
+        const filterPid = memoFilterProjectId;
+
+        let filterHtml =
+          '<div class="row" style="margin-bottom:0.75rem">' +
+          '<select id="memo-filter" style="max-width:220px;margin-bottom:0">' +
+          '<option value="">전체 프로젝트</option>' +
+          state.devProjects
+            .map(
+              (p) =>
+                '<option value="' +
+                p.id +
+                '"' +
+                (filterPid === p.id ? ' selected' : '') +
+                '>' +
+                esc(p.name) +
+                '</option>'
+            )
+            .join('') +
+          '</select>' +
+          '<button class="btn btn-sm" data-action="apply-memo-filter">필터</button></div>';
+
+        const filtered = filterPid ? memos.filter((m) => m.projectId === filterPid) : memos;
+
+        const listHtml =
+          filtered.length === 0
+            ? '<p class="empty">메모가 없습니다. 프로젝트 탭에서 메모를 추가하세요.</p>'
+            : filtered
+                .map(
+                  (m) =>
+                    '<div class="memo-all-item">' +
+                    '<div class="proj-tag">📁 ' +
+                    esc(m.projectName) +
+                    '</div>' +
+                    memoEditHtml(m, m.projectId, 'all') +
+                    '</div>'
+                )
+                .join('');
+
+        return (
+          '<div class="section-title">📝 메모 전체보기</div>' +
+          '<div class="card"><h2>프로젝트 메모 (' +
+          filtered.length +
+          (filterPid ? '' : ' / ' + memos.length) +
+          ')</h2>' +
+          '<p class="muted" style="margin-bottom:0.5rem">모든 프로젝트 메모를 한곳에서 보고 수정할 수 있습니다.</p>' +
+          filterHtml +
+          listHtml +
+          '</div>'
         );
       }
 
@@ -753,6 +801,47 @@
         'nav-view'(el) {
           currentView = el.dataset.view;
           render();
+        },
+        'apply-memo-filter'() {
+          const sel = document.getElementById('memo-filter');
+          memoFilterProjectId = sel && sel.value ? sel.value : null;
+          render();
+        },
+        'save-brainstorm-canvas'() {
+          const el = document.getElementById('brainstorm-canvas');
+          if (!el) return;
+          if (!state.brainstorm) state.brainstorm = { canvas: '', notes: [] };
+          state.brainstorm.canvas = el.value;
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        },
+        'add-bs-note'() {
+          const body = document.getElementById('new-bs-note').value.trim();
+          if (!body) return alert('내용을 입력하세요.');
+          if (!state.brainstorm) state.brainstorm = { canvas: '', notes: [] };
+          state.brainstorm.notes.unshift({
+            id: uid(),
+            body,
+            createdAt: nowIso(),
+            updatedAt: nowIso(),
+          });
+          document.getElementById('new-bs-note').value = '';
+          persist();
+        },
+        'save-bs-note'(el) {
+          const n = state.brainstorm.notes.find((x) => x.id === el.dataset.nid);
+          const ta = document.querySelector('.bs-note-edit[data-nid="' + el.dataset.nid + '"]');
+          if (!n || !ta) return;
+          n.body = ta.value;
+          n.updatedAt = nowIso();
+          showToast('저장됨');
+          persist();
+        },
+        'del-bs-note'(el) {
+          if (!state.brainstorm) return;
+          state.brainstorm.notes = state.brainstorm.notes.filter(
+            (n) => n.id !== el.dataset.nid
+          );
+          persist();
         },
         'add-project'() {
           const name = document.getElementById('new-proj-name').value.trim();
@@ -813,10 +902,8 @@
           if (!t) return;
           t.done = el.checked;
           t.updatedAt = nowIso();
-          if (t.done && !t.completedAt) {
-            t.completedAt = nowIso();
-            addXp(XP_REWARDS.task_complete, 'task_complete', t.id);
-          }
+          if (t.done) t.completedAt = nowIso();
+          else delete t.completedAt;
           p.updatedAt = nowIso();
           persist();
         },
@@ -862,8 +949,12 @@
           const p = state.devProjects.find((x) => x.id === el.dataset.pid);
           const m = p && p.ideas && p.ideas.find((x) => x.id === el.dataset.iid);
           if (!m) return;
-          const dateEl = document.querySelector('.idea-date-edit[data-iid="' + m.id + '"]');
-          const bodyEl = document.querySelector('.idea-body-edit[data-iid="' + m.id + '"]');
+          const dateEl = document.querySelector(
+            '.idea-date-edit[data-iid="' + m.id + '"]'
+          );
+          const bodyEl = document.querySelector(
+            '.idea-body-edit[data-iid="' + m.id + '"]'
+          );
           m.memoDate = (dateEl && dateEl.value) || m.memoDate || todayStr();
           m.body = bodyEl ? bodyEl.value : m.body;
           m.updatedAt = nowIso();
@@ -907,6 +998,9 @@
         if (e.target.dataset.action === 'preview-progress') {
           actions['preview-progress'](e.target);
         }
+        if (e.target.id === 'brainstorm-canvas') {
+          actions['save-brainstorm-canvas']();
+        }
       });
 
       /* ═══════════════════════════════════════════════════════════════
@@ -915,7 +1009,9 @@
       function renderNav() {
         const views = [
           { id: 'home', label: '🏠 홈' },
-          { id: 'developer', label: '🛠️ 개발자' },
+          { id: 'developer', label: '🛠️ 프로젝트' },
+          { id: 'brainstorm', label: '💡 브레인스톰' },
+          { id: 'memos', label: '📝 메모' },
         ];
         document.getElementById('nav').innerHTML = views
           .map(
@@ -935,6 +1031,8 @@
         renderNav();
         const main = document.getElementById('main');
         if (currentView === 'developer') main.innerHTML = renderDeveloper();
+        else if (currentView === 'brainstorm') main.innerHTML = renderBrainstorm();
+        else if (currentView === 'memos') main.innerHTML = renderMemosAll();
         else main.innerHTML = renderHome();
       }
 
