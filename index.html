@@ -123,6 +123,9 @@
       }
       ul.list li:last-child { border-bottom: none; }
       .project-item {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
         cursor: pointer;
         padding: 0.55rem 0.65rem;
         border-radius: 8px;
@@ -134,6 +137,25 @@
         border-color: var(--accent);
         background: var(--surface2);
       }
+      .project-item.dragging { opacity: 0.4; }
+      .project-item.drag-over {
+        border-color: var(--accent);
+        background: var(--surface2);
+        box-shadow: inset 0 2px 0 var(--accent);
+      }
+      .drag-handle {
+        color: var(--muted);
+        font-size: 1rem;
+        line-height: 1;
+        cursor: grab;
+        user-select: none;
+        padding: 0.1rem 0.2rem;
+        flex-shrink: 0;
+        opacity: 0.55;
+      }
+      .project-item:hover .drag-handle { opacity: 1; }
+      .drag-handle:active { cursor: grabbing; }
+      .project-item-body { flex: 1; min-width: 0; }
       .badge {
         display: inline-block;
         font-size: 0.72rem;
@@ -544,12 +566,17 @@
         const showProgress = statusDef && statusDef.hasPercent;
 
         let projList = projects.length
-          ? projects
+          ? '<div id="project-list">' +
+            projects
               .map(
                 (p) =>
                   '<div class="project-item' +
                   (p.id === selectedProjectId ? ' selected' : '') +
-                  '" data-action="select-project" data-id="' +
+                  '" data-id="' +
+                  p.id +
+                  '">' +
+                  '<span class="drag-handle" draggable="true" title="드래그하여 순서 변경">⠿</span>' +
+                  '<div class="project-item-body" data-action="select-project" data-id="' +
                   p.id +
                   '"><strong>' +
                   esc(p.name) +
@@ -557,9 +584,10 @@
                   p.status +
                   '">' +
                   statusDisplay(p) +
-                  '</span></div>'
+                  '</span></div></div>'
               )
-              .join('')
+              .join('') +
+            '</div>'
           : '<p class="empty">프로젝트 없음</p>';
 
         let projDetail = '';
@@ -684,6 +712,7 @@
           '<div class="row"><input id="new-proj-name" placeholder="프로젝트명">' +
           '<button class="btn btn-dev" data-action="add-project">등록</button></div></div>' +
           '<div class="split"><div class="card"><h3>프로젝트</h3>' +
+          '<p class="muted" style="font-size:0.78rem;margin:-0.35rem 0 0.5rem">⠿ 드래그하여 순서 변경</p>' +
           projList +
           '</div><div>' +
           projDetail +
@@ -787,6 +816,62 @@
           listHtml +
           '</div>'
         );
+      }
+
+      function reorderProjects(fromId, toId) {
+        if (!fromId || !toId || fromId === toId) return;
+        const list = state.devProjects;
+        const fromIdx = list.findIndex((p) => p.id === fromId);
+        const toIdx = list.findIndex((p) => p.id === toId);
+        if (fromIdx < 0 || toIdx < 0) return;
+        const [item] = list.splice(fromIdx, 1);
+        list.splice(toIdx, 0, item);
+        persist();
+      }
+
+      function bindProjectDragDrop() {
+        const listEl = document.getElementById('project-list');
+        if (!listEl) return;
+
+        let draggedId = null;
+
+        listEl.querySelectorAll('.drag-handle').forEach((handle) => {
+          handle.addEventListener('dragstart', (e) => {
+            const item = handle.closest('.project-item');
+            if (!item) return;
+            draggedId = item.dataset.id;
+            item.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', draggedId);
+            e.dataTransfer.setDragImage(item, 24, 16);
+          });
+          handle.addEventListener('dragend', () => {
+            const item = handle.closest('.project-item');
+            if (item) item.classList.remove('dragging');
+            listEl.querySelectorAll('.project-item').forEach((el) =>
+              el.classList.remove('drag-over')
+            );
+            draggedId = null;
+          });
+        });
+
+        listEl.querySelectorAll('.project-item').forEach((item) => {
+          item.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            if (item.dataset.id !== draggedId) item.classList.add('drag-over');
+          });
+          item.addEventListener('dragleave', (e) => {
+            if (!item.contains(e.relatedTarget)) item.classList.remove('drag-over');
+          });
+          item.addEventListener('drop', (e) => {
+            e.preventDefault();
+            item.classList.remove('drag-over');
+            const fromId = e.dataTransfer.getData('text/plain') || draggedId;
+            const toId = item.dataset.id;
+            if (fromId && toId) reorderProjects(fromId, toId);
+          });
+        });
       }
 
       /* ═══════════════════════════════════════════════════════════════
@@ -1034,6 +1119,7 @@
         else if (currentView === 'brainstorm') main.innerHTML = renderBrainstorm();
         else if (currentView === 'memos') main.innerHTML = renderMemosAll();
         else main.innerHTML = renderHome();
+        if (currentView === 'developer') bindProjectDragDrop();
       }
 
       render();
