@@ -222,14 +222,17 @@
         color: var(--dev);
         margin-bottom: 0.35rem;
       }
-      .memo-preview {
-        font-size: 0.85rem;
-        color: var(--muted);
-        padding: 0.4rem 0;
-        border-bottom: 1px dashed var(--border);
-        margin-bottom: 0.5rem;
+      .idea-body-edit,
+      #proj-idea-body {
+        min-height: 100px;
+        line-height: 1.55;
+        font-size: 0.92rem;
+        resize: vertical;
+        overflow: hidden;
+        width: 100%;
+        white-space: pre-wrap;
+        word-break: break-word;
       }
-      .memo-preview:last-child { border-bottom: none; }
     </style>
   </head>
   <body>
@@ -499,6 +502,24 @@
         );
       }
 
+      function fitMemoTextareas(root) {
+        const scope = root || document;
+        scope.querySelectorAll('.idea-body-edit, #proj-idea-body').forEach((ta) => {
+          const fit = () => {
+            ta.style.height = 'auto';
+            const lines = Math.max(1, (ta.value || '').split('\n').length);
+            const minH = Math.max(100, lines * 26 + 28);
+            ta.style.minHeight = minH + 'px';
+            ta.style.height = Math.max(minH, ta.scrollHeight + 4) + 'px';
+          };
+          fit();
+          if (!ta.dataset.fitBound) {
+            ta.dataset.fitBound = '1';
+            ta.addEventListener('input', fit);
+          }
+        });
+      }
+
       function esc(s) {
         if (s == null) return '';
         return String(s)
@@ -594,19 +615,12 @@
         if (sel) {
           const tasks = sel.tasks || [];
           const ideas = sortIdeas(sel.ideas || []);
-          const previewIdeas = ideas.slice(0, 3);
 
-          const ideaPreviewHtml = previewIdeas.length
-            ? previewIdeas
+          const ideaListHtml = ideas.length
+            ? ideas
                 .map(
                   (m) =>
-                    '<div class="memo-preview">' +
-                    (m.pinned ? '📌 ' : '') +
-                    '<span class="muted">' +
-                    esc(m.memoDate || '') +
-                    '</span> · ' +
-                    esc(m.body.length > 60 ? m.body.slice(0, 60) + '…' : m.body) +
-                    '</div>'
+                    '<div class="memo-all-item">' + memoEditHtml(m, sel.id) + '</div>'
                 )
                 .join('')
             : '<p class="empty">메모 없음</p>';
@@ -695,13 +709,13 @@
             sel.id +
             '">메모 추가</button>' +
             '<div style="margin-top:0.65rem">' +
-            ideaPreviewHtml +
-            (ideas.length > 3
-              ? '<p class="muted">외 ' + (ideas.length - 3) + '개 메모</p>'
+            ideaListHtml +
+            (ideas.length > 0
+              ? '<button class="btn btn-sm" style="margin-top:0.35rem" data-action="nav-view" data-view="memos">📝 메모 전체보기 (' +
+                ideas.length +
+                ')</button>'
               : '') +
-            '<button class="btn btn-sm" style="margin-top:0.35rem" data-action="nav-view" data-view="memos">📝 메모 전체보기 (' +
-            ideas.length +
-            ')</button></div></div>';
+            '</div></div>';
         } else if (projects.length) {
           projDetail = '<p class="empty card">프로젝트를 선택하세요.</p>';
         }
@@ -1120,6 +1134,9 @@
         else if (currentView === 'memos') main.innerHTML = renderMemosAll();
         else main.innerHTML = renderHome();
         if (currentView === 'developer') bindProjectDragDrop();
+        if (currentView === 'developer' || currentView === 'memos') {
+          requestAnimationFrame(() => fitMemoTextareas());
+        }
       }
 
       render();
