@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Game Dev Todo</title>
     <style>
-      :root {
+      :root,
+      [data-theme='dark'] {
         --bg: #0f1419;
         --surface: #1a2332;
         --surface2: #243044;
@@ -14,11 +15,44 @@
         --muted: #8b9cb3;
         --accent: #5ce1e6;
         --accent2: #a78bfa;
-        --player: #34d399;
         --dev: #fbbf24;
         --danger: #f87171;
         --radius: 10px;
         --font: 'Segoe UI', system-ui, sans-serif;
+        --btn-primary-bg: #1e3a5f;
+        --btn-primary-color: var(--accent);
+        --card-shadow: none;
+        --header-bg: transparent;
+        --badge-scheduled: #93c5fd;
+        --badge-planning: #c4b5fd;
+        --badge-development: var(--dev);
+        --badge-testing: #fb923c;
+        --badge-closing: #f472b6;
+        --badge-completed: #34d399;
+      }
+      [data-theme='office'] {
+        --bg: #eef1f6;
+        --surface: #ffffff;
+        --surface2: #f3f5f9;
+        --border: #cdd5e0;
+        --text: #1c2434;
+        --muted: #5a6778;
+        --accent: #2563eb;
+        --accent2: #4f46e5;
+        --dev: #1d4ed8;
+        --danger: #b91c1c;
+        --radius: 6px;
+        --font: 'Segoe UI', 'Malgun Gothic', system-ui, sans-serif;
+        --btn-primary-bg: #2563eb;
+        --btn-primary-color: #ffffff;
+        --card-shadow: 0 1px 3px rgba(15, 23, 42, 0.07);
+        --header-bg: #ffffff;
+        --badge-scheduled: #1d4ed8;
+        --badge-planning: #5b21b6;
+        --badge-development: #1d4ed8;
+        --badge-testing: #c2410c;
+        --badge-closing: #9d174d;
+        --badge-completed: #047857;
       }
       * { box-sizing: border-box; margin: 0; padding: 0; }
       body {
@@ -36,11 +70,26 @@
         flex-wrap: wrap;
         gap: 0.75rem;
         margin-bottom: 1.25rem;
-        padding-bottom: 1rem;
+        padding: 1rem 0;
         border-bottom: 1px solid var(--border);
+        background: var(--header-bg);
       }
-      header h1 { font-size: 1.35rem; font-weight: 700; }
+      .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        flex-wrap: wrap;
+      }
+      .theme-toggle { white-space: nowrap; }
+      [data-theme='office'] .theme-toggle {
+        background: var(--surface2);
+        border-color: var(--border);
+        color: var(--muted);
+      }
+      header h1 { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.02em; }
       header h1 span { color: var(--accent); }
+      [data-theme='office'] header h1 { font-size: 1.2rem; font-weight: 600; }
+      [data-theme='office'] header h1 span { color: #1e3a5f; }
       nav {
         display: flex;
         gap: 0.35rem;
@@ -73,12 +122,15 @@
         border-radius: var(--radius);
         padding: 1rem 1.1rem;
         margin-bottom: 0.85rem;
+        box-shadow: var(--card-shadow);
       }
       .card h2, .card h3 {
         font-size: 0.95rem;
         margin-bottom: 0.65rem;
         color: var(--accent);
       }
+      [data-theme='office'] .card h2 { color: #1e3a5f; font-weight: 600; }
+      [data-theme='office'] .card h3 { color: var(--muted); font-weight: 600; text-transform: none; }
       .card h3 { font-size: 0.88rem; color: var(--muted); }
       .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; }
       @media (max-width: 640px) { .grid-2 { grid-template-columns: 1fr; } }
@@ -108,7 +160,17 @@
         font-weight: 600;
       }
       button.btn:hover { border-color: var(--accent); }
-      button.btn-primary { background: #1e3a5f; border-color: var(--accent); color: var(--accent); }
+      button.btn-primary {
+        background: var(--btn-primary-bg);
+        border-color: var(--accent);
+        color: var(--btn-primary-color);
+      }
+      [data-theme='office'] button.btn:hover { background: var(--surface2); }
+      [data-theme='office'] button.btn-primary:hover {
+        background: #1d4ed8;
+        border-color: #1d4ed8;
+        color: #fff;
+      }
       button.btn-dev { border-color: var(--dev); color: var(--dev); }
       button.btn-danger { border-color: var(--danger); color: var(--danger); }
       button.btn-sm { padding: 0.3rem 0.55rem; font-size: 0.78rem; }
@@ -164,9 +226,14 @@
         background: var(--surface2);
         color: var(--muted);
       }
-      .badge-planned { color: #93c5fd; }
-      .badge-in_progress { color: var(--dev); }
-      .badge-completed { color: #34d399; }
+      .badge-planned { color: var(--badge-scheduled); }
+      .badge-in_progress { color: var(--badge-development); }
+      .badge-completed { color: var(--badge-completed); }
+      [data-theme='office'] .badge {
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        font-weight: 600;
+      }
       .toast {
         position: fixed;
         bottom: 1.25rem;
@@ -197,12 +264,12 @@
         align-items: center;
         gap: 0.5rem;
       }
-      .badge-scheduled { color: #93c5fd; }
-      .badge-planning { color: #c4b5fd; }
-      .badge-development { color: var(--dev); }
-      .badge-testing { color: #fb923c; }
-      .badge-closing { color: #f472b6; }
-      .badge-completed { color: #34d399; }
+      .badge-scheduled { color: var(--badge-scheduled); }
+      .badge-planning { color: var(--badge-planning); }
+      .badge-development { color: var(--badge-development); }
+      .badge-testing { color: var(--badge-testing); }
+      .badge-closing { color: var(--badge-closing); }
+      .badge-completed { color: var(--badge-completed); }
       .badge-stopped { color: var(--muted); }
       .progress-block { margin: 0.5rem 0 0.75rem; }
       .progress-block input[type='range'] { width: 100%; margin: 0.35rem 0; }
@@ -233,13 +300,49 @@
         white-space: pre-wrap;
         word-break: break-word;
       }
+      [data-theme='office'] input,
+      [data-theme='office'] textarea,
+      [data-theme='office'] select {
+        border-radius: 4px;
+        background: #fff;
+      }
+      [data-theme='office'] input:focus,
+      [data-theme='office'] textarea:focus,
+      [data-theme='office'] select:focus {
+        outline: 2px solid rgba(37, 99, 235, 0.25);
+        border-color: var(--accent);
+      }
+      [data-theme='office'] .section-title {
+        font-size: 1rem;
+        font-weight: 600;
+        color: #1e3a5f;
+        border-left: 3px solid var(--accent);
+        padding-left: 0.55rem;
+      }
+      [data-theme='office'] nav {
+        background: var(--surface2);
+        border-radius: 4px;
+      }
+      [data-theme='office'] nav button.active {
+        background: #fff;
+        color: var(--accent);
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+      }
     </style>
   </head>
   <body>
     <div class="app">
       <header>
-        <h1>🎮 <span>Game Dev</span> Todo</h1>
-        <nav id="nav"></nav>
+        <h1 id="app-title">🎮 <span>Game Dev</span> Todo</h1>
+        <div class="header-actions">
+          <button
+            type="button"
+            id="theme-toggle"
+            class="btn btn-sm theme-toggle"
+            data-action="toggle-theme"
+          >☀️ 사무용</button>
+          <nav id="nav"></nav>
+        </div>
       </header>
       <main id="main"></main>
     </div>
@@ -250,6 +353,33 @@
          데이터 구조 (src/types/index.ts)
       ═══════════════════════════════════════════════════════════════ */
       const STORAGE_KEY = 'game-life-manager:v1';
+      const THEME_KEY = 'game-dev-todo-theme';
+
+      let currentTheme = 'dark';
+
+      function applyTheme(theme) {
+        currentTheme = theme === 'office' ? 'office' : 'dark';
+        document.documentElement.setAttribute('data-theme', currentTheme);
+        localStorage.setItem(THEME_KEY, currentTheme);
+        const btn = document.getElementById('theme-toggle');
+        const title = document.getElementById('app-title');
+        if (btn) {
+          btn.textContent = currentTheme === 'office' ? '🌙 다크' : '☀️ 사무용';
+        }
+        if (title) {
+          title.innerHTML =
+            currentTheme === 'office'
+              ? '<span>Game Dev</span> Workspace'
+              : '🎮 <span>Game Dev</span> Todo';
+        }
+      }
+
+      function loadTheme() {
+        const saved = localStorage.getItem(THEME_KEY);
+        applyTheme(saved === 'office' ? 'office' : 'dark');
+      }
+
+      loadTheme();
 
       const PROJECT_STATUSES = [
         { id: 'scheduled', label: '예정', hasPercent: false },
@@ -900,6 +1030,9 @@
         'nav-view'(el) {
           currentView = el.dataset.view;
           render();
+        },
+        'toggle-theme'() {
+          applyTheme(currentTheme === 'office' ? 'dark' : 'office');
         },
         'apply-memo-filter'() {
           const sel = document.getElementById('memo-filter');
