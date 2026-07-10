@@ -277,6 +277,61 @@
       .task-row { flex-wrap: wrap; align-items: center !important; }
       .task-row input.task-title-input { flex: 1; min-width: 140px; margin-bottom: 0; }
       .brainstorm-canvas { min-height: 280px; font-size: 0.92rem; line-height: 1.6; }
+      .memo-collapse-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        margin-bottom: 0.35rem;
+        flex-wrap: wrap;
+      }
+      .memo-snippet {
+        font-size: 0.88rem;
+        line-height: 1.45;
+        padding: 0.35rem 0 0.5rem;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .memo-collapse-body.hidden { display: none; }
+      .collapsible-head { cursor: pointer; user-select: none; padding: 0.25rem 0; margin-bottom: 0.35rem; }
+      .collapsible-head:hover h3 { color: var(--accent); }
+      .collapse-icon { color: var(--muted); font-size: 0.85rem; }
+      .tasks-collapse-body.hidden { display: none; }
+      .task-done-label {
+        font-size: 0.78rem;
+        margin: 0.65rem 0 0.35rem;
+        padding-top: 0.5rem;
+        border-top: 1px dashed var(--border);
+      }
+      .task-row.done-task { opacity: 0.75; }
+      .rich-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        margin-bottom: 0.5rem;
+        padding: 0.4rem;
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+      }
+      .rich-toolbar .btn { margin-bottom: 0; padding: 0.25rem 0.5rem; min-width: 2rem; }
+      .rich-editor {
+        min-height: 280px;
+        font-size: 0.92rem;
+        line-height: 1.6;
+        padding: 0.65rem;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--bg);
+        outline: none;
+      }
+      .rich-editor:focus { border-color: var(--accent); }
+      .rich-editor:empty::before {
+        content: attr(data-placeholder);
+        color: var(--muted);
+        pointer-events: none;
+      }
+      .rich-editor.bs-note-edit { min-height: 72px; }
       .memo-all-item {
         background: var(--bg);
         border: 1px solid var(--border);
@@ -445,7 +500,7 @@
               ? Math.min(100, Math.max(0, p.progressPercent ?? 0))
               : undefined,
             ideas,
-            tasks: p.tasks || [],
+            tasks: sortTasks(p.tasks || []),
           };
         });
 
@@ -485,6 +540,8 @@
       let currentView = 'home';
       let selectedProjectId = null;
       let memoFilterProjectId = null;
+      let expandedMemos = new Set();
+      let tasksSectionOpenByProject = {};
 
       function loadAppData() {
         try {
@@ -592,11 +649,75 @@
         });
       }
 
+      function sortTasks(tasks) {
+        const pending = tasks.filter((t) => !t.done);
+        const done = tasks.filter((t) => t.done);
+        return [...pending, ...done];
+      }
+
+      function isMemoLong(body) {
+        const b = body || '';
+        return b.length > 80 || b.split('\n').length > 3;
+      }
+
+      function memoSnippet(body) {
+        const t = (body || '').replace(/\s+/g, ' ').trim();
+        return t.length > 90 ? t.slice(0, 90) + '…' : t || '(내용 없음)';
+      }
+
+      function isMemoExpanded(m) {
+        if (!isMemoLong(m.body)) return true;
+        return expandedMemos.has(m.id);
+      }
+
+      function bodyToEditorHtml(body) {
+        if (!body) return '';
+        if (/<[a-z][\s\S]*>/i.test(body)) return body;
+        return esc(body).replace(/\n/g, '<br>');
+      }
+
+      function richToolbarHtml(targetId) {
+        const colors = [
+          ['#dc2626', '빨강'],
+          ['#2563eb', '파랑'],
+          ['#16a34a', '초록'],
+          ['#ca8a04', '노랑'],
+          ['#9333ea', '보라'],
+        ];
+        return (
+          '<div class="rich-toolbar" data-target="' +
+          targetId +
+          '">' +
+          '<button type="button" class="btn btn-sm" data-action="rich-cmd" data-cmd="underline" title="밑줄"><u>U</u></button>' +
+          colors
+            .map(
+              (c) =>
+                '<button type="button" class="btn btn-sm" data-action="rich-cmd" data-cmd="foreColor" data-val="' +
+                c[0] +
+                '" title="' +
+                c[1] +
+                '" style="color:' +
+                c[0] +
+                ';font-weight:700">A</button>'
+            )
+            .join('') +
+          '<button type="button" class="btn btn-sm" data-action="rich-cmd" data-cmd="hiliteColor" data-val="#fef08a" title="형광펜">🖍</button>' +
+          '<button type="button" class="btn btn-sm" data-action="rich-cmd" data-cmd="removeFormat" title="서식 지우기">✕</button>' +
+          '</div>'
+        );
+      }
+
       function memoEditHtml(m, pid, prefix) {
+        const expanded = isMemoExpanded(m);
+        const long = isMemoLong(m.body);
         const p = prefix || '';
         return (
-          (m.pinned ? '📌 ' : '') +
-          '<div class="row" style="margin-bottom:0.35rem">' +
+          '<div class="memo-collapsible" data-mid="' +
+          m.id +
+          '">' +
+          '<div class="memo-collapse-head">' +
+          '<div class="row" style="margin:0;flex:1">' +
+          (m.pinned ? '<span>📌</span>' : '') +
           '<label class="muted" style="font-size:0.82rem">날짜</label>' +
           '<input type="date" class="idea-date-edit" data-prefix="' +
           p +
@@ -604,7 +725,21 @@
           m.id +
           '" value="' +
           esc(m.memoDate || todayStr()) +
-          '" style="max-width:160px;margin-bottom:0"></div>' +
+          '" style="max-width:150px;margin-bottom:0">' +
+          (long
+            ? '<button type="button" class="btn btn-sm" data-action="toggle-memo-expand" data-mid="' +
+              m.id +
+              '">' +
+              (expanded ? '접기 ▲' : '펼치기 ▼') +
+              '</button>'
+            : '') +
+          '</div></div>' +
+          (!expanded && long
+            ? '<div class="memo-snippet muted">' + esc(memoSnippet(m.body)) + '</div>'
+            : '') +
+          '<div class="memo-collapse-body' +
+          (expanded ? '' : ' hidden') +
+          '">' +
           '<textarea class="idea-body-edit" data-prefix="' +
           p +
           '" data-iid="' +
@@ -628,13 +763,80 @@
           pid +
           '" data-iid="' +
           m.id +
-          '">삭제</button>'
+          '">삭제</button></div></div>'
+        );
+      }
+
+      function taskRowHtml(t, pid) {
+        return (
+          '<li class="task-row' +
+          (t.done ? ' done-task' : '') +
+          '"><label class="chk"><input type="checkbox" data-action="toggle-task" data-pid="' +
+          pid +
+          '" data-tid="' +
+          t.id +
+          '"' +
+          (t.done ? ' checked' : '') +
+          '></label>' +
+          '<input class="task-title-input' +
+          (t.done ? ' done-text' : '') +
+          '" id="task-title-' +
+          t.id +
+          '" value="' +
+          esc(t.title) +
+          '">' +
+          '<button class="btn btn-sm btn-dev" data-action="save-task" data-pid="' +
+          pid +
+          '" data-tid="' +
+          t.id +
+          '">저장</button>' +
+          '<button class="btn btn-sm btn-danger" data-action="del-task" data-pid="' +
+          pid +
+          '" data-tid="' +
+          t.id +
+          '">×</button></li>'
+        );
+      }
+
+      function tasksSectionHtml(tasks, pid) {
+        const sorted = sortTasks(tasks);
+        const pending = sorted.filter((t) => !t.done);
+        const done = sorted.filter((t) => t.done);
+        const sectionOpen = tasksSectionOpenByProject[pid] !== false;
+
+        if (!tasks.length) return '<p class="empty">작업 없음</p>';
+
+        return (
+          '<div class="collapsible-head row" data-action="toggle-tasks-section" data-pid="' +
+          pid +
+          '">' +
+          '<h3 style="margin:0;flex:1">작업 목록 <span class="muted" style="font-weight:400;font-size:0.82rem">(' +
+          pending.length +
+          ' 남음' +
+          (done.length ? ', 완료 ' + done.length : '') +
+          ')</span></h3>' +
+          '<span class="collapse-icon">' +
+          (sectionOpen ? '▼' : '▶') +
+          '</span></div>' +
+          '<div class="tasks-collapse-body' +
+          (sectionOpen ? '' : ' hidden') +
+          '">' +
+          '<ul class="list">' +
+          pending.map((t) => taskRowHtml(t, pid)).join('') +
+          '</ul>' +
+          (done.length
+            ? '<p class="task-done-label">✓ 완료됨</p><ul class="list">' +
+              done.map((t) => taskRowHtml(t, pid)).join('') +
+              '</ul>'
+            : '') +
+          '</div>'
         );
       }
 
       function fitMemoTextareas(root) {
         const scope = root || document;
-        scope.querySelectorAll('.idea-body-edit, #proj-idea-body').forEach((ta) => {
+        scope.querySelectorAll('.idea-body-edit:not(.hidden), #proj-idea-body').forEach((ta) => {
+          if (ta.closest('.memo-collapse-body.hidden')) return;
           const fit = () => {
             ta.style.height = 'auto';
             const lines = Math.max(1, (ta.value || '').split('\n').length);
@@ -793,42 +995,11 @@
                 '" data-action="preview-progress">' +
                 '</div>'
               : '<p class="muted progress-block">예정·완료·중지는 % 없음. 기획·개발·테스트·마감에서 진행률을 설정하세요.</p>') +
-            '<h3>작업 목록</h3>' +
             '<div class="row"><input id="new-task" placeholder="작업 추가">' +
             '<button class="btn btn-sm btn-dev" data-action="add-task" data-id="' +
             sel.id +
             '">추가</button></div>' +
-            (tasks.length
-              ? '<ul class="list">' +
-                tasks
-                  .map(
-                    (t) =>
-                      '<li class="task-row"><label class="chk"><input type="checkbox" data-action="toggle-task" data-pid="' +
-                      sel.id +
-                      '" data-tid="' +
-                      t.id +
-                      '"' +
-                      (t.done ? ' checked' : '') +
-                      '></label>' +
-                      '<input class="task-title-input" id="task-title-' +
-                      t.id +
-                      '" value="' +
-                      esc(t.title) +
-                      '">' +
-                      '<button class="btn btn-sm btn-dev" data-action="save-task" data-pid="' +
-                      sel.id +
-                      '" data-tid="' +
-                      t.id +
-                      '">저장</button>' +
-                      '<button class="btn btn-sm btn-danger" data-action="del-task" data-pid="' +
-                      sel.id +
-                      '" data-tid="' +
-                      t.id +
-                      '">×</button></li>'
-                  )
-                  .join('') +
-                '</ul>'
-              : '<p class="empty">작업 없음</p>') +
+            tasksSectionHtml(tasks, sel.id) +
             '<h3 style="margin-top:1rem">💡 프로젝트 메모</h3>' +
             '<div class="row"><label class="muted" style="font-size:0.85rem">기록 날짜</label>' +
             '<input type="date" id="proj-idea-date" value="' +
@@ -875,11 +1046,14 @@
               .map(
                 (n) =>
                   '<div class="card" style="padding:0.75rem;margin-bottom:0.5rem">' +
-                  '<textarea class="bs-note-edit" data-nid="' +
+                  richToolbarHtml('bs-note-' + n.id) +
+                  '<div id="bs-note-' +
                   n.id +
-                  '" style="min-height:64px">' +
-                  esc(n.body) +
-                  '</textarea>' +
+                  '" class="rich-editor bs-note-edit" contenteditable="true" data-nid="' +
+                  n.id +
+                  '">' +
+                  bodyToEditorHtml(n.body) +
+                  '</div>' +
                   '<p class="muted" style="font-size:0.75rem;margin:0.25rem 0">' +
                   fmtDate(n.updatedAt) +
                   '</p>' +
@@ -896,12 +1070,14 @@
         return (
           '<div class="section-title">💡 브레인스톰</div>' +
           '<div class="card"><h2>자유 메모 캔버스</h2>' +
-          '<p class="muted" style="margin-bottom:0.5rem">프로젝트에 묶이지 않고 자유롭게 아이디어를 적어 보세요. 입력 시 자동 저장됩니다.</p>' +
-          '<textarea id="brainstorm-canvas" class="brainstorm-canvas" placeholder="게임 아이디어, 시스템 구상, 떠오르는 생각…">' +
-          esc(bs.canvas || '') +
-          '</textarea></div>' +
+          '<p class="muted" style="margin-bottom:0.5rem">프로젝트에 묶이지 않고 자유롭게 아이디어를 적어 보세요. 색상·밑줄 서식을 쓸 수 있습니다.</p>' +
+          richToolbarHtml('brainstorm-canvas') +
+          '<div id="brainstorm-canvas" class="rich-editor brainstorm-canvas" contenteditable="true" data-placeholder="게임 아이디어, 시스템 구상, 떠오르는 생각…">' +
+          bodyToEditorHtml(bs.canvas || '') +
+          '</div></div>' +
           '<div class="card"><h3>스티키 메모</h3>' +
-          '<textarea id="new-bs-note" placeholder="짧은 아이디어 한 줄…" style="min-height:56px"></textarea>' +
+          richToolbarHtml('new-bs-note') +
+          '<div id="new-bs-note" class="rich-editor bs-note-edit" contenteditable="true" data-placeholder="짧은 아이디어…"></div>' +
           '<button class="btn btn-dev" data-action="add-bs-note">메모 추가</button>' +
           '<div style="margin-top:0.75rem">' +
           notesHtml +
@@ -1039,31 +1215,59 @@
           memoFilterProjectId = sel && sel.value ? sel.value : null;
           render();
         },
+        'toggle-memo-expand'(el) {
+          const mid = el.dataset.mid;
+          if (expandedMemos.has(mid)) expandedMemos.delete(mid);
+          else expandedMemos.add(mid);
+          render();
+        },
+        'toggle-tasks-section'(el) {
+          const pid = el.dataset.pid;
+          const open = tasksSectionOpenByProject[pid] !== false;
+          tasksSectionOpenByProject[pid] = !open;
+          render();
+        },
+        'rich-cmd'(el) {
+          const cmd = el.dataset.cmd;
+          const val = el.dataset.val;
+          const toolbar = el.closest('.rich-toolbar');
+          const targetId = toolbar && toolbar.dataset.target;
+          const editor = targetId ? document.getElementById(targetId) : null;
+          if (!editor) return;
+          editor.focus();
+          if (cmd === 'foreColor' || cmd === 'hiliteColor') {
+            document.execCommand(cmd, false, val);
+          } else {
+            document.execCommand(cmd, false, val || null);
+          }
+          if (editor.id === 'brainstorm-canvas') actions['save-brainstorm-canvas']();
+        },
         'save-brainstorm-canvas'() {
           const el = document.getElementById('brainstorm-canvas');
           if (!el) return;
           if (!state.brainstorm) state.brainstorm = { canvas: '', notes: [] };
-          state.brainstorm.canvas = el.value;
+          state.brainstorm.canvas = el.innerHTML;
           localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         },
         'add-bs-note'() {
-          const body = document.getElementById('new-bs-note').value.trim();
-          if (!body) return alert('내용을 입력하세요.');
+          const el = document.getElementById('new-bs-note');
+          const textOnly = el ? el.textContent.trim() : '';
+          if (!textOnly) return alert('내용을 입력하세요.');
           if (!state.brainstorm) state.brainstorm = { canvas: '', notes: [] };
           state.brainstorm.notes.unshift({
             id: uid(),
-            body,
+            body: el.innerHTML,
             createdAt: nowIso(),
             updatedAt: nowIso(),
           });
-          document.getElementById('new-bs-note').value = '';
+          el.innerHTML = '';
           persist();
         },
         'save-bs-note'(el) {
           const n = state.brainstorm.notes.find((x) => x.id === el.dataset.nid);
-          const ta = document.querySelector('.bs-note-edit[data-nid="' + el.dataset.nid + '"]');
-          if (!n || !ta) return;
-          n.body = ta.value;
+          const ed = document.getElementById('bs-note-' + el.dataset.nid);
+          if (!n || !ed) return;
+          n.body = ed.innerHTML;
           n.updatedAt = nowIso();
           showToast('저장됨');
           persist();
@@ -1136,6 +1340,7 @@
           t.updatedAt = nowIso();
           if (t.done) t.completedAt = nowIso();
           else delete t.completedAt;
+          p.tasks = sortTasks(p.tasks);
           p.updatedAt = nowIso();
           persist();
         },
@@ -1212,6 +1417,10 @@
         },
       };
 
+      document.body.addEventListener('mousedown', (e) => {
+        if (e.target.closest('[data-action="rich-cmd"]')) e.preventDefault();
+      });
+
       document.body.addEventListener('click', (e) => {
         const el = e.target.closest('[data-action]');
         if (!el) return;
@@ -1226,12 +1435,17 @@
         }
       });
 
+      function bindRichEditors() {
+        const canvas = document.getElementById('brainstorm-canvas');
+        if (canvas && !canvas.dataset.bsBound) {
+          canvas.dataset.bsBound = '1';
+          canvas.addEventListener('input', () => actions['save-brainstorm-canvas']());
+        }
+      }
+
       document.body.addEventListener('input', (e) => {
         if (e.target.dataset.action === 'preview-progress') {
           actions['preview-progress'](e.target);
-        }
-        if (e.target.id === 'brainstorm-canvas') {
-          actions['save-brainstorm-canvas']();
         }
       });
 
@@ -1267,6 +1481,7 @@
         else if (currentView === 'memos') main.innerHTML = renderMemosAll();
         else main.innerHTML = renderHome();
         if (currentView === 'developer') bindProjectDragDrop();
+        if (currentView === 'brainstorm') bindRichEditors();
         if (currentView === 'developer' || currentView === 'memos') {
           requestAnimationFrame(() => fitMemoTextareas());
         }
